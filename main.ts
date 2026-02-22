@@ -6,6 +6,7 @@ import { ObsidianistSettings,DEFAULT_SETTINGS,ObsidianistSettingTab } from './sr
 //todoist  api
 import { TodoistRestAPI } from './src/todoistRestAPI';
 import { TodoistSyncAPI } from './src/todoistSyncAPI';
+import { TodoistAPI } from 'src/todoistAPI';
 //task parser 
 import { TaskParser } from './src/taskParser';
 //cache task read and write
@@ -20,10 +21,11 @@ import { TodoistSync } from './src/syncModule';
 //import modal
 import { SetDefalutProjectInTheFilepathModal } from 'src/modal';
 
-export default class ObsidianistForObsidian extends Plugin {
+export default class Obsidianist extends Plugin {
 	settings: ObsidianistSettings;
     todoistRestAPI: TodoistRestAPI | undefined;
     todoistSyncAPI: TodoistSyncAPI | undefined;
+	todoistAPI: TodoistAPI | undefined;
     taskParser: TaskParser | undefined;
     cacheOperation: CacheOperation | undefined;
     fileOperation: FileOperation | undefined;
@@ -289,7 +291,7 @@ export default class ObsidianistForObsidian extends Plugin {
 
 
 	async onunload() {
-		console.log(`Ultimate Todoist Sync for Obsidian id unloaded!`)
+		console.warn(`Unloading obsidianist, saving settings.`)
 		await this.saveSettings()
 
 	}
@@ -328,6 +330,7 @@ export default class ObsidianistForObsidian extends Plugin {
 		
 		//initialize todoist restapi 
 		this.todoistRestAPI = new TodoistRestAPI(this.app, this)
+		this.todoistAPI = new TodoistAPI(this.app, this)
 
 		//initialize data read and write object
 		this.cacheOperation = new CacheOperation(this.app, this)

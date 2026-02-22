@@ -1,5 +1,5 @@
 import { App} from 'obsidian';
-import ObsidianistForObsidian from "../main";
+import Obsidianist from "../main";
 
 
 
@@ -77,9 +77,9 @@ const REGEX = {
 
 export class TaskParser   {
 	app:App;
-    plugin: ObsidianistForObsidian;
+    plugin: Obsidianist;
 
-	constructor(app:App, plugin:ObsidianistForObsidian) {
+	constructor(app:App, plugin:Obsidianist) {
 		//super(app,settings);
 		this.app = app;
         this.plugin = plugin

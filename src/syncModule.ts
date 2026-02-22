@@ -1,4 +1,4 @@
-import ObsidianistForObsidian from "../main";
+import Obsidianist from "../main";
 import { App, Editor, MarkdownView, Notice} from 'obsidian';
 
 
@@ -9,10 +9,10 @@ type FrontMatter = {
 
 export class TodoistSync  {
 	app:App;
-    plugin: ObsidianistForObsidian;
+    plugin: Obsidianist;
 
 
-	constructor(app:App, plugin:ObsidianistForObsidian) {
+	constructor(app:App, plugin:Obsidianist) {
 		//super(app,settings,todoistRestAPI,todoistSyncAPI,taskParser,cacheOperation);
 		this.app = app;
         this.plugin = plugin;

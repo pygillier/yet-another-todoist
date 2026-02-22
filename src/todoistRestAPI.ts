@@ -1,6 +1,6 @@
 import { TodoistApi } from "@doist/todoist-api-typescript"
 import { App} from 'obsidian';
-import ObsidianistForObsidian from "../main";
+import Obsidianist from "../main";
     //convert date from obsidian event
     // 使用示例
     //const str = "2023-03-27";
@@ -23,9 +23,9 @@ function  localDateStringToUTCDatetimeString(localDateString:string) {
 
 export class TodoistRestAPI  {
 	app:App;
-  plugin: ObsidianistForObsidian;
+  plugin: Obsidianist;
 
-	constructor(app:App, plugin:ObsidianistForObsidian) {
+	constructor(app:App, plugin:Obsidianist) {
 		//super(app,settings);
 		this.app = app;
     this.plugin = plugin;

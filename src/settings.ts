@@ -1,5 +1,5 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import ObsidianistForObsidian from "../main";
+import Obsidianist from "../main";
 
 interface MyProject {
 	id: string;
@@ -46,9 +46,9 @@ export const DEFAULT_SETTINGS: ObsidianistSettings = {
 
 
 export class ObsidianistSettingTab extends PluginSettingTab {
-	plugin: ObsidianistForObsidian;
+	plugin: Obsidianist;
 
-	constructor(app: App, plugin: ObsidianistForObsidian) {
+	constructor(app: App, plugin: Obsidianist) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

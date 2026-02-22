@@ -1,5 +1,5 @@
-import { App} from 'obsidian';
-import ObsidianistForObsidian from "../main";
+import { App, Notice} from 'obsidian';
+import Obsidianist from "../main";
 
 interface Due {
     date?: string;
@@ -8,9 +8,9 @@ interface Due {
 
 export class CacheOperation   {
 	app:App;
-    plugin: ObsidianistForObsidian;
+    plugin: Obsidianist;
 
-	constructor(app:App, plugin: ObsidianistForObsidian) {
+	constructor(app:App, plugin: Obsidianist) {
 		//super(app,settings);
 		this.app = app;
         this.plugin = plugin;
@@ -422,7 +422,7 @@ export class CacheOperation   {
     async saveProjectsToCache() {
         try{
                 //get projects
-            const projects = await this.plugin.todoistRestAPI.GetAllProjects()
+            const projects = await this.plugin.todoistAPI.getAllProjects()
             if(!projects){
                 return false
             }
