@@ -1,11 +1,11 @@
 import { App} from 'obsidian';
-import UltimateTodoistSyncForObsidian from "../main";
+import ObsidianistForObsidian from "../main";
 export class FileOperation   {
 	app:App;
-    plugin: UltimateTodoistSyncForObsidian;
+    plugin: ObsidianistForObsidian;
 
 
-	constructor(app:App, plugin:UltimateTodoistSyncForObsidian) {
+	constructor(app:App, plugin:ObsidianistForObsidian) {
 		//super(app,settings);
 		this.app = app;
         this.plugin = plugin;

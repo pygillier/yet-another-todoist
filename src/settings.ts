@@ -1,5 +1,5 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import UltimateTodoistSyncForObsidian from "../main";
+import ObsidianistForObsidian from "../main";
 
 interface MyProject {
 	id: string;
@@ -7,7 +7,7 @@ interface MyProject {
   }
 
 
-export interface UltimateTodoistSyncSettings {
+export interface ObsidianistSettings {
     initialized:boolean;
 	//mySetting: string;
 	//todoistTasksFilePath: string;
@@ -25,7 +25,7 @@ export interface UltimateTodoistSyncSettings {
 }
 
 
-export const DEFAULT_SETTINGS: UltimateTodoistSyncSettings = {
+export const DEFAULT_SETTINGS: ObsidianistSettings = {
 	initialized: false,
 	apiInitialized:false,
 	defaultProjectName:"Inbox",
@@ -45,10 +45,10 @@ export const DEFAULT_SETTINGS: UltimateTodoistSyncSettings = {
 
 
 
-export class UltimateTodoistSyncSettingTab extends PluginSettingTab {
-	plugin: UltimateTodoistSyncForObsidian;
+export class ObsidianistSettingTab extends PluginSettingTab {
+	plugin: ObsidianistForObsidian;
 
-	constructor(app: App, plugin: UltimateTodoistSyncForObsidian) {
+	constructor(app: App, plugin: ObsidianistForObsidian) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

@@ -1,5 +1,5 @@
 import { App, Modal ,Setting } from "obsidian";
-import  UltimateTodoistSyncForObsidian  from "../main"
+import  ObsidianistForObsidian  from "../main"
 
 
 interface MyProject {
@@ -11,10 +11,10 @@ export class SetDefalutProjectInTheFilepathModal extends Modal {
   defaultProjectId: string
   defaultProjectName: string
   filepath:string
-  plugin:UltimateTodoistSyncForObsidian
+  plugin:ObsidianistForObsidian
 
     
-  constructor(app: App,plugin:UltimateTodoistSyncForObsidian, filepath:string) {
+  constructor(app: App,plugin:ObsidianistForObsidian, filepath:string) {
     super(app);
     this.filepath = filepath
     this.plugin = plugin

@@ -2,7 +2,7 @@ import { MarkdownView, Notice, Plugin ,Editor, WorkspaceLeaf} from 'obsidian';
 
 
 //settings
-import { UltimateTodoistSyncSettings,DEFAULT_SETTINGS,UltimateTodoistSyncSettingTab } from './src/settings';
+import { ObsidianistSettings,DEFAULT_SETTINGS,ObsidianistSettingTab } from './src/settings';
 //todoist  api
 import { TodoistRestAPI } from './src/todoistRestAPI';
 import { TodoistSyncAPI } from './src/todoistSyncAPI';
@@ -20,8 +20,8 @@ import { TodoistSync } from './src/syncModule';
 //import modal
 import { SetDefalutProjectInTheFilepathModal } from 'src/modal';
 
-export default class UltimateTodoistSyncForObsidian extends Plugin {
-	settings: UltimateTodoistSyncSettings;
+export default class ObsidianistForObsidian extends Plugin {
+	settings: ObsidianistSettings;
     todoistRestAPI: TodoistRestAPI | undefined;
     todoistSyncAPI: TodoistSyncAPI | undefined;
     taskParser: TaskParser | undefined;
@@ -41,7 +41,7 @@ export default class UltimateTodoistSyncForObsidian extends Plugin {
 			return;
 		}
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new UltimateTodoistSyncSettingTab(this.app, this));
+		this.addSettingTab(new ObsidianistSettingTab(this.app, this));
 		if (!this.settings.todoistAPIToken) {
 			new Notice('Please enter your Todoist API.');
 			//return	   
