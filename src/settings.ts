@@ -58,8 +58,6 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Settings for Ultimate Todoist Sync for Obsidian.' });
-
 		const myProjectsOptions: MyProject | undefined = this.plugin.settings.todoistTasksData?.projects?.reduce((obj, item) => {
 			obj[(item.id).toString()] = item.name;
 			return obj;
