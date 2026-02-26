@@ -1,14 +1,24 @@
-import { TodoistApi as DoistApi } from "@doist/todoist-api-typescript";
+import {
+	TodoistApi as DoistApi,
+	PersonalProject,
+	WorkspaceProject,
+	Task,
+	AddTaskArgs
+} from "@doist/todoist-api-typescript";
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
+import TaskObject from "./interfaces";
 
 export class TodoistAPI {
 	app: App;
 	plugin: Obsidianist;
+	api: DoistApi
 
 	constructor(app: App, plugin: Obsidianist) {
 		this.app = app;
 		this.plugin = plugin;
+
+		this.api = this.initializeAPI();
 	}
 
 	initializeAPI(): DoistApi {
@@ -21,28 +31,42 @@ export class TodoistAPI {
 
 	async getAllProjects() {
 		/**
-		 * Fetch all project for current API key
+		 * Fetch all projects for current API key
+		 * @todo Define correct return type hint (Promise of PersonalProject/WorkspaceProject array or boolean)
 		 */
-
-		const api = this.initializeAPI();
-
 		try {
 			let allProjects = [];
 			let cursor = null;
+
 			do {
-				const projects = await api.getProjects({
+				const projects = await this.api.getProjects({
 					cursor: cursor,
 					limit: 10,
 				});
 				cursor = projects.nextCursor;
 				allProjects = [...allProjects, ...projects.results];
 			} while (cursor != null);
-			//console.log(allProjects)
+
 			return allProjects;
 		} catch (error) {
 			console.error("Error while fetching projects:" + error);
-			new Notice("Can't fetch all projects, check API key");
+			new Notice("Unable to fetch all projects, check API key");
+
 			return false;
+		}
+	}
+
+	async addTask(task: TaskObject): Promise<Task> {
+		try {
+			if (task.dueDate) {
+				task.dueDatetime = localDateStringToUTCDatetimeString(task.dueDatetime);
+				task.dueDate = null;
+			}
+
+			const newTask = await this.api.addTask(task as AddTaskArgs);
+			return newTask;
+		} catch (error) {
+			throw new Error(`Error adding task: ${error.message}`);
 		}
 	}
 }

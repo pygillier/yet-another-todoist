@@ -234,7 +234,7 @@ export class CacheOperation {
 	}
 
 	//读取指定id的任务
-	loadTaskFromCacheyID(taskId) {
+	loadTaskFromCacheID(taskId) {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 			//console.log(savedTasks)

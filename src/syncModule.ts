@@ -11,7 +11,6 @@ export class TodoistSync {
 	plugin: Obsidianist;
 
 	constructor(app: App, plugin: Obsidianist) {
-		//super(app,settings,todoistRestAPI,todoistSyncAPI,taskParser,cacheOperation);
 		this.app = app;
 		this.plugin = plugin;
 	}
@@ -108,119 +107,113 @@ export class TodoistSync {
 		);
 	}
 
-	async lineContentNewTaskCheck(
+	/**
+	 * Create a task from the provided line
+	 * 
+	 * @param editor 
+	 * @param view 
+	 */
+	async addTaskFromLine(
 		editor: Editor,
 		view: MarkdownView,
 	): Promise<void> {
-		//const editor = this.app.workspace.activeEditor?.editor
-		//const view =this.app.workspace.getActiveViewOfType(MarkdownView)
 
 		const filepath = view.file?.path;
-		const fileContent = view?.data;
+		const fileContent = view.data;
 		const cursor = editor.getCursor();
 		const line = cursor.line;
 		const linetxt = editor.getLine(line);
 
-		//添加task
-		if (
-			!this.plugin.taskParser.hasTodoistId(linetxt) &&
-			this.plugin.taskParser.hasTodoistTag(linetxt)
-		) {
-			//是否包含#todoist
-			console.log("this is a new task");
-			console.log(linetxt);
-			const currentTask =
-				await this.plugin.taskParser.convertTextToTodoistTaskObject(
-					linetxt,
-					filepath,
-					line,
-					fileContent,
-				);
-			//console.log(currentTask)
+		const extractedTask =
+			await this.plugin.taskParser?.convertTextToTaskObject(
+				linetxt,
+				filepath,
+				fileContent,
+				line,
+			);
 
-			try {
-				const newTask =
-					await this.plugin.todoistRestAPI.AddTask(currentTask);
-				const {
-					id: todoist_id,
-					projectId: todoist_projectId,
-					url: todoist_url,
-				} = newTask;
-				newTask.path = filepath;
-				//console.log(newTask);
-				new Notice(`new task ${newTask.content} id is ${newTask.id}`);
-				//newTask写入缓存
-				this.plugin.cacheOperation.appendTaskToCache(newTask);
+		try {
+			const newTask =	await this.plugin.todoistAPI?.addTask(extractedTask);
 
-				//如果任务已完成
-				if (currentTask.isCompleted === true) {
-					await this.plugin.todoistRestAPI.CloseTask(newTask.id);
-					this.plugin.cacheOperation.closeTaskToCacheByID(todoist_id);
-				}
-				this.plugin.saveSettings();
+			const {
+				id: todoist_id,
+				projectId: todoist_projectId,
+				url: todoist_url,
+			} = newTask;
+			newTask.path = filepath;
 
-				//todoist id 保存到 任务后面
-				const text_with_out_link = `${linetxt} %%[todoist_id:: ${todoist_id}]%%`;
-				const link = this.plugin.settings.useAppURI
-					? `[link](todoist://task?id=${newTask.id})`
-					: `[link](${newTask.url})`;
-				const text = this.plugin.taskParser.addTodoistLink(
-					text_with_out_link,
-					link,
-				);
-				const from = { line: cursor.line, ch: 0 };
-				const to = { line: cursor.line, ch: linetxt.length };
-				view.app.workspace.activeEditor?.editor?.replaceRange(
-					text,
-					from,
-					to,
-				);
+			new Notice(`new task ${newTask.content} id is ${newTask.id}`);
 
-				//处理frontMatter
-				try {
-					// 处理 front matter
-					const frontMatter =
-						await this.plugin.cacheOperation.getFileMetadata(
-							filepath,
-						);
-					//console.log(frontMatter);
+			this.plugin.cacheOperation.appendTaskToCache(newTask);
 
-					if (!frontMatter) {
-						//console.log('frontmatter is empty');
-						//return;
-					}
-
-					// 将 todoistCount 加 1
-					const newFrontMatter = { ...frontMatter };
-					newFrontMatter.todoistCount =
-						(newFrontMatter.todoistCount ?? 0) + 1;
-
-					// 记录 taskID
-					newFrontMatter.todoistTasks = [
-						...(newFrontMatter.todoistTasks || []),
-						todoist_id,
-					];
-
-					// 更新 front matter
-					/*
-                     this.plugin.fileOperation.updateFrontMatter(view.file, (frontMatter) => {
-                        frontMatter.todoistTasks = newFrontMatter.todoistTasks;
-                        frontMatter.todoistCount = newFrontMatter.todoistCount;
-                      });
-                      */
-					//console.log(newFrontMatter)
-					await this.plugin.cacheOperation.updateFileMetadata(
-						filepath,
-						newFrontMatter,
-					);
-				} catch (error) {
-					console.error(error);
-				}
-			} catch (error) {
-				console.error("Error adding task:", error);
-				console.log(`The error occurred in the file: ${filepath}`);
-				return;
+			//如果任务已完成
+			if (extractedTask.isCompleted === true) {
+				await this.plugin.todoistRestAPI.CloseTask(newTask.id);
+				this.plugin.cacheOperation.closeTaskToCacheByID(todoist_id);
 			}
+			this.plugin.saveSettings();
+
+			//todoist id 保存到 任务后面
+			const text_with_out_link = `${linetxt} %%[todoist_id:: ${todoist_id}]%%`;
+			const link = this.plugin.settings.useAppURI
+				? `[link](todoist://task?id=${newTask.id})`
+				: `[link](${newTask.url})`;
+			const text = this.plugin.taskParser.addTodoistLink(
+				text_with_out_link,
+				link,
+			);
+			const from = { line: cursor.line, ch: 0 };
+			const to = { line: cursor.line, ch: linetxt.length };
+			view.app.workspace.activeEditor?.editor?.replaceRange(
+				text,
+				from,
+				to,
+			);
+
+			//处理frontMatter
+			try {
+				// 处理 front matter
+				const frontMatter =
+					await this.plugin.cacheOperation.getFileMetadata(
+						filepath,
+					);
+				//console.log(frontMatter);
+
+				if (!frontMatter) {
+					//console.log('frontmatter is empty');
+					//return;
+				}
+
+				// 将 todoistCount 加 1
+				const newFrontMatter = { ...frontMatter };
+				newFrontMatter.todoistCount =
+					(newFrontMatter.todoistCount ?? 0) + 1;
+
+				// 记录 taskID
+				newFrontMatter.todoistTasks = [
+					...(newFrontMatter.todoistTasks || []),
+					todoist_id,
+				];
+
+				// 更新 front matter
+				/*
+					this.plugin.fileOperation.updateFrontMatter(view.file, (frontMatter) => {
+					frontMatter.todoistTasks = newFrontMatter.todoistTasks;
+					frontMatter.todoistCount = newFrontMatter.todoistCount;
+					});
+					*/
+				//console.log(newFrontMatter)
+				await this.plugin.cacheOperation.updateFileMetadata(
+					filepath,
+					newFrontMatter,
+				);
+			} catch (error) {
+				console.error(error);
+			}
+		} catch (error) {
+			console.error("Error adding task:", error);
+			console.log(`The error occurred in the file: ${filepath}`);
+			return;
 		}
 	}
 
@@ -278,7 +271,7 @@ export class TodoistSync {
 				//console.log(`line text: ${line}`)
 				console.log(filepath);
 				const currentTask =
-					await this.plugin.taskParser.convertTextToTodoistTaskObject(
+					await this.plugin.taskParser.convertTextToTaskObject(
 						line,
 						filepath,
 						i,
@@ -389,22 +382,22 @@ export class TodoistSync {
 			this.plugin.taskParser.hasTodoistTag(lineText)
 		) {
 			const lineTask =
-				await this.plugin.taskParser.convertTextToTodoistTaskObject(
+				await this.plugin.taskParser.convertTextToTaskObject(
 					lineText,
 					filepath,
 					lineNumber,
 					fileContent,
 				);
 			//console.log(lastLineTask)
-			const lineTask_todoist_id = lineTask.todoist_id.toString();
+			const lineTask_todoist_id = lineTask.todoistId.toString();
 			//console.log(lineTask_todoist_id )
 			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)
 			const savedTask =
-				await this.plugin.cacheOperation.loadTaskFromCacheyID(
+				await this.plugin.cacheOperation.loadTaskFromCacheID(
 					lineTask_todoist_id,
 				); //dataview中 id为数字，todoist中id为字符串，需要转换
 			if (!savedTask) {
-				console.log(`本地缓存中没有task ${lineTask.todoist_id}`);
+				console.log(`本地缓存中没有task ${lineTask.todoistId}`);
 				const url =
 					this.plugin.taskParser.getObsidianUrlFromFilepath(filepath);
 				console.log(url);
@@ -523,7 +516,7 @@ export class TodoistSync {
 					//console.log(updatedContent)
 					const updatedTask =
 						await this.plugin.todoistRestAPI.UpdateTask(
-							lineTask.todoist_id.toString(),
+							lineTask.todoistId.toString(),
 							updatedContent,
 						);
 					updatedTask.path = filepath;
@@ -539,18 +532,18 @@ export class TodoistSync {
 					if (lineTask.isCompleted === true) {
 						console.log(`task completed`);
 						this.plugin.todoistRestAPI.CloseTask(
-							lineTask.todoist_id.toString(),
+							lineTask.todoistId.toString(),
 						);
 						this.plugin.cacheOperation.closeTaskToCacheByID(
-							lineTask.todoist_id.toString(),
+							lineTask.todoistId.toString(),
 						);
 					} else {
 						console.log(`task umcompleted`);
 						this.plugin.todoistRestAPI.OpenTask(
-							lineTask.todoist_id.toString(),
+							lineTask.todoistId.toString(),
 						);
 						this.plugin.cacheOperation.reopenTaskToCacheByID(
-							lineTask.todoist_id.toString(),
+							lineTask.todoistId.toString(),
 						);
 					}
 

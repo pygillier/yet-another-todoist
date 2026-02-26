@@ -1,5 +1,6 @@
 import { App } from "obsidian";
 import Obsidianist from "../main";
+import TaskObject from './interfaces';
 
 interface dataviewTaskObject {
 	status: string;
@@ -22,21 +23,7 @@ interface dataviewTaskObject {
 	blockId: string;
 }
 
-interface todoistTaskObject {
-	content: string;
-	description?: string;
-	project_id?: string;
-	section_id?: string;
-	parent_id?: string;
-	order?: number | null;
-	labels?: string[];
-	priority?: number | null;
-	due_string?: string;
-	due_date?: string;
-	due_datetime?: string;
-	due_lang?: string;
-	assignee_id?: string;
-}
+
 
 const keywords = {
 	TODOIST_TAG: "#todoist",
@@ -48,7 +35,7 @@ const REGEX = {
 		`^[\\s]*[-] \\[[x ]\\] [\\s\\S]*${keywords.TODOIST_TAG}[\\s\\S]*$`,
 		"i",
 	),
-	TODOIST_ID: /\[todoist_id::\s*\d+\]/,
+	TODOIST_ID: /\[todoist_id::\s*\w+\]/,
 	TODOIST_ID_NUM: /\[todoist_id::\s*(.*?)\]/,
 	TODOIST_LINK: /\[link\]\(.*?\)/,
 	DUE_DATE_WITH_EMOJ: new RegExp(
@@ -87,59 +74,70 @@ export class TaskParser {
 		this.plugin = plugin;
 	}
 
-	//convert line text to a task object
-	async convertTextToTodoistTaskObject(
+	async convertTextToTaskObject(
 		lineText: string,
 		filepath: string,
-		lineNumber?: number,
-		fileContent?: string,
-	) {
-		//console.log(`linetext is:${lineText}`)
+		fileContent: string,
+		lineNumber: number,
+	): Promise<TaskObject> {
+		/**
+		 * Convert a line from the note to a TaskObject.
+		 */
 
-		let hasParent = false;
-		let parentId = null;
-		let parentTaskObject = null;
-		// 检测 parentID
-		let textWithoutIndentation = lineText;
-		if (this.getTabIndentation(lineText) > 0) {
-			//console.log(`缩进为 ${this.getTabIndentation(lineText)}`)
-			textWithoutIndentation = this.removeTaskIndentation(lineText);
-			//console.log(textWithoutIndentation)
-			//console.log(`这是子任务`)
-			//读取filepath
-			//const fileContent = await this.plugin.fileOperation.readContentFromFilePath(filepath)
-			//遍历 line
-			const lines = fileContent.split("\n");
-			//console.log(lines)
+		console.log(`Line to parse: ${lineText}`)
+
+		// Clean out text
+		const cleanedText = this.removeTaskIndentation(lineText)
+
+		let task = {
+			hasParent: false,
+			content: this.getTaskContentFromLineText(cleanedText),
+			dueDate: this.getDueDateFromLineText(cleanedText),
+			labels: this.getAllTagsFromLineText(cleanedText),
+			priority: this.getTaskPriority(cleanedText),
+			isCompleted: this.isTaskCheckboxChecked(cleanedText),
+			todoistId: this.getTodoistIdFromLineText(cleanedText),
+		} as TaskObject;
+
+		// Config
+		task.projectId = this.plugin.cacheOperation?.getDefaultProjectIdForFilepath(
+				filepath as string,
+			);
+
+		if (filepath) {
+			let url = encodeURI(
+				`obsidian://open?vault=${this.app.vault.getName()}&file=${filepath}`,
+			);
+			task.description = `[${filepath}](${url})`;
+		}
+
+		/**
+		 * Line is indented, need to find parent task:
+		 * 1. check previous lines until find a line with less indentation
+		 * 2. if the line has todoist id, then get parent id and parent task object from cache
+		 */
+		if (this.isIndentedTask(lineText)) {
+			const lines = fileContent?.split("\n") ?? [];
+
+			// Check each line, in reverse, until a line with less indentation or reach the top of the file
 			for (let i = lineNumber - 1; i >= 0; i--) {
-				//console.log(`正在check${i}行的缩进`)
+				
 				const line = lines[i];
-				//console.log(line)
-				//如果是空行说明没有parent
-				if (this.isLineBlank(line)) {
-					break;
-				}
-				//如果tab数量大于等于当前line,跳过
-				if (
-					this.getTabIndentation(line) >=
-					this.getTabIndentation(lineText)
-				) {
-					//console.log(`缩进为 ${this.getTabIndentation(line)}`)
+
+				// Break if line is blank, no possible parent task above
+				if (this.isLineBlank(line)) { break;}
+
+				// Same or higher indentation, continue searching
+				if (this.getIndentation(line) >= this.getIndentation(lineText)) {
 					continue;
 				}
-				if (
-					this.getTabIndentation(line) <
-					this.getTabIndentation(lineText)
-				) {
-					//console.log(`缩进为 ${this.getTabIndentation(line)}`)
+
+				// Lower indentation found, check if it has todoist id
+				if (this.getIndentation(line) <	this.getIndentation(lineText)) {
 					if (this.hasTodoistId(line)) {
-						parentId = this.getTodoistIdFromLineText(line);
-						hasParent = true;
-						//console.log(`parent id is ${parentId}`)
-						parentTaskObject =
-							this.plugin.cacheOperation.loadTaskFromCacheyID(
-								parentId,
-							);
+						task.parentId = this.getTodoistIdFromLineText(line);
+						task.hasParent = true;
+						console.log(`Found parent task with id ${task.parentId} for task ${task.content}`)
 						break;
 					} else {
 						break;
@@ -147,88 +145,41 @@ export class TaskParser {
 				}
 			}
 		}
+		if (task.hasParent) {
+			// Remap task project to parent one.
+			const parentTask = this.plugin.cacheOperation?.loadTaskFromCacheID(task.parentId,);
+			task.projectId = parentTask.projectId;
 
-		const dueDate = this.getDueDateFromLineText(textWithoutIndentation);
-		const labels = this.getAllTagsFromLineText(textWithoutIndentation);
-		//console.log(`labels is ${labels}`)
-
-		//dataview format metadata
-		//const projectName = this.getProjectNameFromLineText(textWithoutIndentation) ?? this.plugin.settings.defaultProjectName
-		//const projectId = await this.plugin.cacheOperation.getProjectIdByNameFromCache(projectName)
-		//use tag as project name
-
-		let projectId =
-			this.plugin.cacheOperation.getDefaultProjectIdForFilepath(
-				filepath as string,
-			);
-		let projectName =
-			this.plugin.cacheOperation.getProjectNameByIdFromCache(projectId);
-
-		if (hasParent) {
-			projectId = parentTaskObject.projectId;
-			projectName =
-				this.plugin.cacheOperation.getProjectNameByIdFromCache(
-					projectId,
-				);
-		}
-		if (!hasParent) {
-			//匹配 tag 和 peoject
-			for (const label of labels) {
-				//console.log(label)
+		} else {
+			// Check if any of the tags in the task content matches a project in the cache, if so, assign the project id to the task.
+			for (const label of task.labels ?? []) {
 				let labelName = label.replace(/#/g, "");
-				//console.log(labelName)
-				let hasProjectId =
-					this.plugin.cacheOperation.getProjectIdByNameFromCache(
+				let project =
+					this.plugin.cacheOperation?.getProjectIdByNameFromCache(
 						labelName,
 					);
-				if (!hasProjectId) {
-					continue;
+				if(project) {
+					task.projectId = project;
+					break;
 				}
-				projectName = labelName;
-				//console.log(`project is ${projectName} ${label}`)
-				projectId = hasProjectId;
-				break;
 			}
 		}
 
-		const content = this.getTaskContentFromLineText(textWithoutIndentation);
-		const isCompleted = this.isTaskCheckboxChecked(textWithoutIndentation);
-		let description = "";
-		const todoist_id = this.getTodoistIdFromLineText(
-			textWithoutIndentation,
-		);
-		const priority = this.getTaskPriority(textWithoutIndentation);
-		if (filepath) {
-			let url = encodeURI(
-				`obsidian://open?vault=${this.app.vault.getName()}&file=${filepath}`,
-			);
-			description = `[${filepath}](${url})`;
-		}
-
-		const todoistTask = {
-			projectId: projectId,
-			content: content || "",
-			parentId: parentId || null,
-			dueDate: dueDate || "",
-			labels: labels || [],
-			description: description,
-			isCompleted: isCompleted,
-			todoist_id: todoist_id || null,
-			hasParent: hasParent,
-			priority: priority,
-		};
-		//console.log(`converted task `)
-		//console.log(todoistTask)
-		return todoistTask;
+		console.log(`Extracted task: ${JSON.stringify(task)}`)
+		return task;
 	}
 
+	/**
+	 * Check whether the todoist tag is present in line
+	 * 
+	 * @param text string
+	 * @returns boolean
+	 */
 	hasTodoistTag(text: string): boolean {
-		// Check whether the todoist tag is present in line
 		return REGEX.TODOIST_TAG.test(text);
 	}
 
 	hasTodoistId(text: string): boolean {
-		// Check whether a todoist task ID is present in line
 		return REGEX.TODOIST_ID.test(text);
 	}
 
@@ -237,46 +188,16 @@ export class TaskParser {
 	}
 
 	getDueDateFromLineText(text: string): string | null {
-		const result = REGEX.DUE_DATE.exec(text);
-		return result ? result[1] : null;
+		return text.match(REGEX.DUE_DATE)?.[1] ?? null;
 	}
 
 	getProjectNameFromLineText(text: string): string | null {
-		const result = REGEX.PROJECT_NAME.exec(text);
-		return result ? result[1] : null;
+		return text.match(REGEX.PROJECT_NAME)?.[1] ?? null;
 	}
 
 	getTodoistIdFromLineText(text: string): string | null {
-		//console.log(text)
-		const result = REGEX.TODOIST_ID_NUM.exec(text);
-		//console.log(result)
-		return result ? result[1] : null;
+		return text.match(REGEX.TODOIST_ID_NUM)?.[1] ?? null;
 	}
-
-	getDueDateFromDataview(dataviewTask: object) {
-		if (!dataviewTask.due) {
-			return "";
-		} else {
-			const dataviewTaskDue = dataviewTask.due.toString().slice(0, 10);
-			return dataviewTaskDue;
-		}
-	}
-
-	/*
-    //convert line task to dataview task object
-    async  getLineTask(filepath,line){
-        //const tasks = this.app.plugins.plugins.dataview.api.pages(`"${filepath}"`).file.tasks
-        const tasks = await getAPI(this.app).pages(`"${filepath}"`).file.tasks
-        const tasksValues = tasks.values
-        //console.log(`dataview filepath is ${filepath}`)
-        //console.log(`dataview line is ${line}`)
-        //console.log(tasksValues)
-        const currentLineTask = tasksValues.find(obj => obj.line === line )	
-        console.log(currentLineTask)
-        return(currentLineTask)
-    
-    }
-    */
 
 	getTaskContentFromLineText(lineText: string) {
 		const TaskContent = lineText
@@ -291,20 +212,20 @@ export class TaskParser {
 		return TaskContent;
 	}
 
-	//get all tags from task text
-	getAllTagsFromLineText(lineText: string) {
+	getAllTagsFromLineText(lineText: string): string[] {
 		let tags = lineText.match(REGEX.ALL_TAGS);
 
-		if (tags) {
-			// Remove '#' from each tag
-			tags = tags.map((tag) => tag.replace("#", ""));
+		if (tags) { // Remove '#' from each tag
+			return(tags.map((tag) => tag.replace("#", "")));
 		}
+		return [];
+	}
 
-		return tags;
+	isNewTask(lineText: string): boolean {
+		return(this.hasTodoistTag(lineText) && !this.hasTodoistId(lineText))
 	}
 
 	isTaskCheckboxChecked(lineText: string): boolean {
-		// Check whether the task checkbox is on
 		return REGEX.TASK_CHECKBOX_CHECKED.test(lineText);
 	}
 
@@ -401,10 +322,7 @@ export class TaskParser {
 		return REGEX.TASK_INDENTATION.test(text);
 	}
 
-	//判断制表符的数量
-	//console.log(getTabIndentation("\t\t- [x] This is a task with two tabs")); // 2
-	//console.log(getTabIndentation("  - [x] This is a task without tabs")); // 0
-	getTabIndentation(lineText: string): number {
+	getIndentation(lineText: string): number {
 		const match = REGEX.TAB_INDENTATION.exec(lineText);
 		return match ? match[1].length : 0;
 	}

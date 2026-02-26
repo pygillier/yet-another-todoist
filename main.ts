@@ -31,9 +31,9 @@ export default class Obsidianist extends Plugin {
 	taskParser: TaskParser | undefined;
 	cacheOperation: CacheOperation | undefined;
 	fileOperation: FileOperation | undefined;
-	todoistSync: TodoistSync | undefined;
+	todoistSync?: TodoistSync;
 	lastLines: Map<string, number>;
-	statusBar;
+	statusBar: HTMLElement;
 	syncLock: Boolean;
 
 	async onload() {
@@ -41,7 +41,7 @@ export default class Obsidianist extends Plugin {
 
 		if (!isSettingsLoaded) {
 			new Notice(
-				"Settings failed to load.Please reload the ultimate todoist sync plugin.",
+				"Could not load obsidianist settings, please reload the plugin.",
 			);
 			return;
 		}
@@ -133,35 +133,49 @@ export default class Obsidianist extends Plugin {
 			}
 		});
 
-		//hook editor-change 事件，如果当前line包含 #todoist,说明有new task
+		/**
+		 * Event raised each time editor content change.
+		 * Fail fast (checking settings & mode) to speed up.
+		 * Try to create a new task.
+		 */
 		this.registerEvent(
 			this.app.workspace.on(
 				"editor-change",
-				async (editor, view: MarkdownView) => {
-					try {
-						if (!this.settings.apiInitialized) {
-							return;
-						}
+				async (editor: Editor, view: MarkdownView) => {
 
+					const cursor = editor.getCursor();
+					const line = cursor.line;
+					const linetxt = editor.getLine(line);
+
+
+					// Fast fail
+					if(!this.settings.apiInitialized || this.settings.enableFullVaultSync) return;
+
+					// Is this a new task ?
+					if(!this.taskParser?.isNewTask(linetxt)) return;
+					
+					console.log(`New task detected: ${linetxt}`)
+					try {
 						this.lineNumberCheck();
 						if (!this.checkModuleClass()) {
 							return;
 						}
-						if (this.settings.enableFullVaultSync) {
-							return;
-						}
-						if (!(await this.checkAndHandleSyncLock())) return;
-						await this.todoistSync.lineContentNewTaskCheck(
+
+						await this.acquireSyncLock();
+						
+						await this.todoistSync?.addTaskFromLine(
 							editor,
 							view,
 						);
-						this.syncLock = false;
+						
 						this.saveSettings();
 					} catch (error) {
 						console.error(
 							`An error occurred while check new task in line: ${error.message}`,
 						);
-						this.syncLock = false;
+					} finally {
+						// Release sync lock
+						this.releaseSyncLock()
 					}
 				},
 			),
@@ -368,7 +382,7 @@ export default class Obsidianist extends Plugin {
 			this.fileOperation = undefined;
 			this.todoistSync = undefined;
 			new Notice(
-				`Ultimate Todoist Sync plugin initialization failed, please check the todoist api`,
+				`Obsidianist initialization failed, please check the todoist api`,
 			);
 			return;
 		}
@@ -400,7 +414,7 @@ export default class Obsidianist extends Plugin {
 			this.settings.initialized = true;
 			this.saveSettings();
 			new Notice(
-				`Ultimate Todoist Sync initialization successful. Todoist data has been backed up.`,
+				`Obsidianist initialization successful. Todoist data has been backed up.`,
 			);
 		}
 
@@ -410,13 +424,15 @@ export default class Obsidianist extends Plugin {
 		//const rsp = await this.todoistSyncAPI.getUserResource()
 		this.settings.apiInitialized = true;
 		this.syncLock = false;
-		new Notice(`Ultimate Todoist Sync loaded successfully.`);
+		new Notice(`Obsidianist started successfully.`);
 		return true;
 	}
 
 	async initializeModuleClass() {
 		//initialize todoist restapi
 		this.todoistRestAPI = new TodoistRestAPI(this.app, this);
+
+		this.todoistAPI = new TodoistAPI(this.app, this);
 
 		//initialize data read and write object
 		this.cacheOperation = new CacheOperation(this.app, this);
@@ -537,7 +553,7 @@ export default class Obsidianist extends Plugin {
 	}
 
 	//return true
-	checkModuleClass() {
+	checkModuleClass(): boolean {
 		if (this.settings.apiInitialized === true) {
 			if (
 				this.todoistRestAPI === undefined ||
@@ -565,7 +581,8 @@ export default class Obsidianist extends Plugin {
 			this.statusBar.setText("");
 		} else {
 			const filepath =
-				this.app.workspace.getActiveViewOfType(MarkdownView)?.file.path;
+				this.app.workspace.getActiveViewOfType(MarkdownView)?.file
+					?.path;
 			if (filepath === undefined) {
 				console.log(`file path undefined`);
 				return;
@@ -582,7 +599,7 @@ export default class Obsidianist extends Plugin {
 		}
 	}
 
-	async scheduledSynchronization() {
+	async scheduledSynchronization(): Promise<void> {
 		if (!this.checkModuleClass()) {
 			return;
 		}
@@ -687,5 +704,40 @@ export default class Obsidianist extends Plugin {
 		}
 		this.syncLock = true;
 		return true;
+	}
+
+	async acquireSyncLock() {
+		if(this.syncLock === true)
+		{
+			// Lock is already set, wait for release
+			console.log("Waiting for SyncLock to release...")
+			let counter = 0
+			while (this.syncLock == true && counter < 10) {
+				await new Promise((resolve) => setTimeout(resolve, 1000));
+				counter++;
+				console.log(`{counter}/10`)
+			}
+			if(this.syncLock === true)
+			{
+				// Lock still not released
+				throw new Error("Unable to acquire sync lock")
+			}
+			else
+			{
+				// Lock released from outside, take it
+				console.log("Acquiring sync lock")
+				this.syncLock = true
+			}
+		}
+		else
+		{
+			// Lock released from outside, take it
+			console.log("Acquiring sync lock")
+			this.syncLock = true
+		}
+	}
+
+	releaseSyncLock() {
+		this.syncLock = false
 	}
 }

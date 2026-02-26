@@ -264,7 +264,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 
 							try {
 								taskObject =
-									await this.plugin.cacheOperation.loadTaskFromCacheyID(
+									await this.plugin.cacheOperation.loadTaskFromCacheID(
 										taskId,
 									);
 							} catch (error) {
@@ -320,7 +320,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 								let taskObject;
 								try {
 									taskObject =
-										await this.plugin.cacheOperation.loadTaskFromCacheyID(
+										await this.plugin.cacheOperation.loadTaskFromCacheID(
 											taskId,
 										);
 								} catch (error) {

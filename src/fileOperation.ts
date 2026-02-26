@@ -44,7 +44,7 @@ export class FileOperation {
 	async completeTaskInTheFile(taskId: string) {
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId);
+			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
 		// 获取文件对象并更新内容
@@ -76,7 +76,7 @@ export class FileOperation {
 	async uncompleteTaskInTheFile(taskId: string) {
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId);
+			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
 		// 获取文件对象并更新内容
@@ -176,7 +176,7 @@ export class FileOperation {
 				const taskID =
 					this.plugin.taskParser.getTodoistIdFromLineText(line);
 				const taskObject =
-					this.plugin.cacheOperation.loadTaskFromCacheyID(taskID);
+					this.plugin.cacheOperation.loadTaskFromCacheID(taskID);
 				const todoistLink = taskObject.url;
 				const link = `[link](${todoistLink})`;
 				const newLine = this.plugin.taskParser.addTodoistLink(
@@ -255,7 +255,7 @@ export class FileOperation {
 		const taskId = evt.object_id;
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId);
+			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
 		// 获取文件对象并更新内容
@@ -293,7 +293,7 @@ export class FileOperation {
 		const taskId = evt.object_id;
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId);
+			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
 		// 获取文件对象并更新内容
@@ -356,7 +356,7 @@ export class FileOperation {
 		);
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId);
+			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
 		// 获取文件对象并更新内容
