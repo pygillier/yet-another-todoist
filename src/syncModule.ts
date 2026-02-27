@@ -125,7 +125,7 @@ export class TodoistSync {
 		const linetxt = editor.getLine(line);
 
 		const extractedTask =
-			await this.plugin.taskParser?.convertTextToTaskObject(
+			await this.plugin.taskParser.convertTextToTaskObject(
 				linetxt,
 				filepath,
 				fileContent,
@@ -133,28 +133,30 @@ export class TodoistSync {
 			);
 
 		try {
-			const newTask =	await this.plugin.todoistAPI?.addTask(extractedTask);
+			const newTask =	await this.plugin.todoistAPI.addTask(extractedTask);
 
 			const {
 				id: todoist_id,
 				projectId: todoist_projectId,
 				url: todoist_url,
 			} = newTask;
+			
+			// @ts-ignore - This is a custom property we're adding to the Task object, so we can ignore the type error
 			newTask.path = filepath;
 
 			new Notice(`new task ${newTask.content} id is ${newTask.id}`);
 
 			this.plugin.cacheOperation.appendTaskToCache(newTask);
 
-			//如果任务已完成
+			// WHen a task is created with completed status, need to close it in todoist and cache
 			if (extractedTask.isCompleted === true) {
-				await this.plugin.todoistRestAPI.CloseTask(newTask.id);
-				this.plugin.cacheOperation.closeTaskToCacheByID(todoist_id);
+				await this.plugin.todoistAPI.closeTask(newTask.id);
+				this.plugin.cacheOperation.closeTaskToCacheByID(newTask.id);
 			}
 			this.plugin.saveSettings();
 
-			//todoist id 保存到 任务后面
-			const text_with_out_link = `${linetxt} %%[todoist_id:: ${todoist_id}]%%`;
+			// Insert the Todoist ID and link back to the task in the file
+			const text_with_out_link = `${linetxt} %%[todoist_id:: ${newTask.id}]%%`;
 			const link = this.plugin.settings.useAppURI
 				? `[link](todoist://task?id=${newTask.id})`
 				: `[link](${newTask.url})`;
@@ -177,7 +179,7 @@ export class TodoistSync {
 					await this.plugin.cacheOperation.getFileMetadata(
 						filepath,
 					);
-				//console.log(frontMatter);
+				console.log(frontMatter);
 
 				if (!frontMatter) {
 					//console.log('frontmatter is empty');
@@ -599,6 +601,8 @@ export class TodoistSync {
 		let view;
 		let filepath;
 
+		console.log("ENTER fullTextModifiedTaskCheck")
+
 		try {
 			if (file_path) {
 				file = this.app.vault.getAbstractFileByPath(file_path);
@@ -652,28 +656,28 @@ export class TodoistSync {
 	// Close a task by calling API and updating JSON file
 	async closeTask(taskId: string): Promise<void> {
 		try {
-			await this.plugin.todoistRestAPI.CloseTask(taskId);
+			await this.plugin.todoistAPI.closeTask(taskId);
 			await this.plugin.fileOperation.completeTaskInTheFile(taskId);
-			await this.plugin.cacheOperation.closeTaskToCacheByID(taskId);
+			this.plugin.cacheOperation.closeTaskToCacheByID(taskId);
 			this.plugin.saveSettings();
-			new Notice(`Task ${taskId} is closed.`);
+			new Notice(`Task "${taskId}" closed.`);
 		} catch (error) {
 			console.error("Error closing task:", error);
-			throw error; // 抛出错误使调用方能够捕获并处理它
+			throw error;
 		}
 	}
 
 	//open task
-	async repoenTask(taskId: string): Promise<void> {
+	async reopenTask(taskId: string): Promise<void> {
 		try {
 			await this.plugin.todoistRestAPI.OpenTask(taskId);
 			await this.plugin.fileOperation.uncompleteTaskInTheFile(taskId);
-			await this.plugin.cacheOperation.reopenTaskToCacheByID(taskId);
+			this.plugin.cacheOperation.reopenTaskToCacheByID(taskId);
 			this.plugin.saveSettings();
-			new Notice(`Task ${taskId} is reopend.`);
+			new Notice(`Task "${taskId}" reopened.`);
 		} catch (error) {
-			console.error("Error opening task:", error);
-			throw error; // 抛出错误使调用方能够捕获并处理它
+			console.error("Error while reopening task:", error);
+			throw error;
 		}
 	}
 

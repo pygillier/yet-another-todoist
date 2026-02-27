@@ -174,7 +174,7 @@ export class FileOperation {
 				console.log(line);
 				//console.log('prepare to add todoist link')
 				const taskID =
-					this.plugin.taskParser.getTodoistIdFromLineText(line);
+					this.plugin.taskParser.extractTodoistIdFromText(line);
 				const taskObject =
 					this.plugin.cacheOperation.loadTaskFromCacheID(taskID);
 				const todoistLink = taskObject.url;

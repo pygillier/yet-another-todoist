@@ -25,16 +25,16 @@ import { SetDefalutProjectInTheFilepathModal } from "src/modal";
 
 export default class Obsidianist extends Plugin {
 	settings: ObsidianistSettings;
-	todoistRestAPI: TodoistRestAPI | undefined;
-	todoistSyncAPI: TodoistSyncAPI | undefined;
-	todoistAPI: TodoistAPI | undefined;
-	taskParser: TaskParser | undefined;
-	cacheOperation: CacheOperation | undefined;
-	fileOperation: FileOperation | undefined;
-	todoistSync?: TodoistSync;
+	todoistRestAPI: TodoistRestAPI;
+	todoistSyncAPI: TodoistSyncAPI;
+	todoistAPI: TodoistAPI;
+	taskParser: TaskParser;
+	cacheOperation: CacheOperation;
+	fileOperation: FileOperation;
+	todoistSync: TodoistSync;
 	lastLines: Map<string, number>;
 	statusBar: HTMLElement;
-	syncLock: Boolean;
+	syncLock: boolean = false;
 
 	async onload() {
 		const isSettingsLoaded = await this.loadSettings();
@@ -47,12 +47,15 @@ export default class Obsidianist extends Plugin {
 		}
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new ObsidianistSettingTab(this.app, this));
-		if (!this.settings.todoistAPIToken) {
-			new Notice("Please enter your Todoist API.");
-			//return
-		} else {
-			await this.initializePlugin();
+
+		await this.initializePlugin();
+		if (!this.settings.apiInitialized) {
+			// Some error happened during initialization, stop loading the plugin
+			console.log(`Plugin initialization failed, stopping plugin load.`);
+			new Notice(`Plugin initialization failed, please check logs and try again.`);
+			return;
 		}
+
 
 		//lastLine 对象 {path:line}保存在lastLines map中
 		this.lastLines = new Map();
@@ -80,7 +83,7 @@ export default class Obsidianist extends Plugin {
 				evt.key === "PageUp" ||
 				evt.key === "PageDown"
 			) {
-				//console.log(`${evt.key} arrow key is released`);
+				console.log(`${evt.key} arrow key is released`);
 				if (!this.checkModuleClass()) {
 					return;
 				}
@@ -108,10 +111,14 @@ export default class Obsidianist extends Plugin {
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
 		this.registerDomEvent(document, "click", async (evt: MouseEvent) => {
-			if (!this.settings.apiInitialized) {
-				return;
+
+			const target = evt.target as HTMLInputElement;
+
+			if (target.type === "checkbox") {
+				this.checkboxEventhandle(evt);
+				return
 			}
-			//console.log('click', evt);
+
 			if (this.app.workspace.activeEditor?.editor?.hasFocus()) {
 				//console.log('Click event: editor is focused');
 				const view =
@@ -122,15 +129,7 @@ export default class Obsidianist extends Plugin {
 				//
 			}
 
-			const target = evt.target as HTMLInputElement;
-
-			if (target.type === "checkbox") {
-				if (!this.checkModuleClass()) {
-					return;
-				}
-				this.checkboxEventhandle(evt);
-				//this.todoistSync.fullTextModifiedTaskCheck()
-			}
+			
 		});
 
 		/**
@@ -139,9 +138,7 @@ export default class Obsidianist extends Plugin {
 		 * Try to create a new task.
 		 */
 		this.registerEvent(
-			this.app.workspace.on(
-				"editor-change",
-				async (editor: Editor, view: MarkdownView) => {
+			this.app.workspace.on("editor-change", async (editor: Editor, view: MarkdownView) => {
 
 					const cursor = editor.getCursor();
 					const line = cursor.line;
@@ -149,21 +146,15 @@ export default class Obsidianist extends Plugin {
 
 
 					// Fast fail
-					if(!this.settings.apiInitialized || this.settings.enableFullVaultSync) return;
+					if(this.settings.enableFullVaultSync) return;
 
 					// Is this a new task ?
-					if(!this.taskParser?.isNewTask(linetxt)) return;
+					if(!this.taskParser.isNewTask(linetxt)) return;
 					
 					console.log(`New task detected: ${linetxt}`)
 					try {
-						this.lineNumberCheck();
-						if (!this.checkModuleClass()) {
-							return;
-						}
-
 						await this.acquireSyncLock();
-						
-						await this.todoistSync?.addTaskFromLine(
+						await this.todoistSync.addTaskFromLine(
 							editor,
 							view,
 						);
@@ -180,40 +171,6 @@ export default class Obsidianist extends Plugin {
 				},
 			),
 		);
-
-		/* 使用其他文件管理器移动，obsidian触发了删除事件，删除了所有的任务
-		//监听删除事件，当文件被删除后，读取frontMatter中的tasklist,批量删除
-		this.registerEvent(this.app.metadataCache.on('deleted', async(file,prevCache) => {
-			try{
-				if(!this.settings.apiInitialized){
-					return
-				}
-				//console.log('a new file has modified')
-				console.log(`file deleted`)
-				//读取frontMatter
-				const frontMatter = await this.cacheOperation.getFileMetadata(file.path)
-				if(frontMatter === null || frontMatter.todoistTasks === undefined){
-					console.log('There is no task in the deleted files.')
-					return
-				}
-				//判断todoistTasks是否为null
-				console.log(frontMatter.todoistTasks)
-				if(!( this.checkModuleClass())){
-						return
-				}
-				if (!await this.checkAndHandleSyncLock()) return;
-				await this.todoistSync.deleteTasksByIds(frontMatter.todoistTasks)
-				this.syncLock = false
-				this.saveSettings()
-			}catch(error){
-				console.error(`An error occurred while deleting task in the file: ${error}`);
-				this.syncLock = false
-			}
-
-			
-			
-		}));
-*/
 
 		//监听 rename 事件,更新 task data 中的 path
 		this.registerEvent(
@@ -260,6 +217,7 @@ export default class Obsidianist extends Plugin {
 		//Listen for file modified events and execute fullTextNewTaskCheck
 		this.registerEvent(
 			this.app.vault.on("modify", async (file) => {
+				console.log("MODIFU")
 				try {
 					if (!this.settings.apiInitialized) {
 						return;
@@ -327,23 +285,23 @@ export default class Obsidianist extends Plugin {
 		this.statusBar = this.addStatusBarItem();
 	}
 
-	async onunload() {
+	async onunload(): Promise<void> {
 		console.warn(`Unloading obsidianist, saving settings.`);
 		await this.saveSettings();
 	}
 
-	async loadSettings() {
+	async loadSettings(): Promise<boolean> {
 		try {
 			const data = await this.loadData();
 			this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
-			return true; // 返回 true 表示设置加载成功
+			return true;
 		} catch (error) {
-			console.error("Failed to load data:", error);
-			return false; // 返回 false 表示设置加载失败
+			console.error("Failed to load settings:", error);
+			return false;
 		}
 	}
 
-	async saveSettings() {
+	async saveSettings(): Promise<void> {
 		try {
 			// 验证设置是否存在且不为空
 			if (this.settings && Object.keys(this.settings).length > 0) {
@@ -363,8 +321,18 @@ export default class Obsidianist extends Plugin {
 		await this.initializePlugin();
 	}
 
-	// return true of false
-	async initializePlugin() {
+	/**
+	 * INitialize the plugin, including:
+	 * 1. initialize todoist api module
+	 * 2. initialize data read and write module, and save projects and labels data to cache
+	 * 3. if first time to initialize, create backup of all todoist data, and initialize settings
+	 * @returns boolean
+	 */
+	async initializePlugin(): Promise<void> {
+		if (!this.settings.todoistAPIToken) {
+			new Notice("Please enter your Todoist API token in the settings.");
+			return;
+		}
 		//initialize todoist restapi
 		this.todoistRestAPI = new TodoistRestAPI(this.app, this);
 		this.todoistAPI = new TodoistAPI(this.app, this);
@@ -374,58 +342,20 @@ export default class Obsidianist extends Plugin {
 		const isProjectsSaved = await this.cacheOperation.saveProjectsToCache();
 
 		if (!isProjectsSaved) {
-			this.todoistRestAPI = undefined;
-			this.todoistSyncAPI = undefined;
-			this.taskParser = undefined;
-			this.taskParser = undefined;
-			this.cacheOperation = undefined;
-			this.fileOperation = undefined;
-			this.todoistSync = undefined;
 			new Notice(
 				`Obsidianist initialization failed, please check the todoist api`,
 			);
 			return;
 		}
 
-		if (!this.settings.initialized) {
-			//创建备份文件夹备份todoist 数据
-			try {
-				//第一次启动插件，备份todoist 数据
-				this.taskParser = new TaskParser(this.app, this);
+		this.taskParser = new TaskParser(this.app, this);
+		this.fileOperation = new FileOperation(this.app, this);
+		this.todoistSyncAPI = new TodoistSyncAPI(this.app, this);
+		this.todoistSync = new TodoistSync(this.app, this);
 
-				//initialize file operation
-				this.fileOperation = new FileOperation(this.app, this);
-
-				//initialize todoisy sync api
-				this.todoistSyncAPI = new TodoistSyncAPI(this.app, this);
-
-				//initialize todoist sync module
-				this.todoistSync = new TodoistSync(this.app, this);
-
-				//每次启动前备份所有数据
-				this.todoistSync.backupTodoistAllResources();
-			} catch (error) {
-				console.log(`error creating user data folder: ${error}`);
-				new Notice(`error creating user data folder`);
-				return;
-			}
-
-			//初始化settings
-			this.settings.initialized = true;
-			this.saveSettings();
-			new Notice(
-				`Obsidianist initialization successful. Todoist data has been backed up.`,
-			);
-		}
-
-		this.initializeModuleClass();
-
-		//get user plan resources
-		//const rsp = await this.todoistSyncAPI.getUserResource()
 		this.settings.apiInitialized = true;
-		this.syncLock = false;
 		new Notice(`Obsidianist started successfully.`);
-		return true;
+		return;
 	}
 
 	async initializeModuleClass() {
@@ -449,13 +379,13 @@ export default class Obsidianist extends Plugin {
 	}
 
 	async lineNumberCheck() {
+		console.log("lineNumberCheck")
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (view) {
 			const cursor = view.app.workspace
 				.getActiveViewOfType(MarkdownView)
 				?.editor.getCursor();
 			const line = cursor?.line;
-			//const lineText = view.editor.getLine(line)
 			const fileContent = view.data;
 
 			//console.log(line)
@@ -490,10 +420,7 @@ export default class Obsidianist extends Plugin {
 
 				// 执行你想要的操作
 				const lastLineText = view.editor.getLine(lastLine as number);
-				//console.log(lastLineText)
-				if (!this.checkModuleClass()) {
-					return;
-				}
+
 				this.lastLines.set(fileName as string, line as number);
 				try {
 					if (!(await this.checkAndHandleSyncLock())) return;
@@ -517,37 +444,22 @@ export default class Obsidianist extends Plugin {
 	}
 
 	async checkboxEventhandle(evt: MouseEvent) {
-		if (!this.checkModuleClass()) {
-			return;
-		}
+
 		const target = evt.target as HTMLInputElement;
 
-		const taskElement = target.closest("div"); //使用 evt.target.closest() 方法寻找特定的父元素，而不是直接访问事件路径中的特定索引
-		//console.log(taskElement)
-		if (!taskElement) return;
-		const regex = /\[todoist_id:: (\d+)\]/; // 匹配 [todoist_id:: 数字] 格式的字符串
-		const match = taskElement.textContent?.match(regex) || false;
-		if (match) {
-			const taskId = match[1];
-			//console.log(taskId)
-			//const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			if (target.checked) {
-				this.todoistSync.closeTask(taskId);
-			} else {
-				this.todoistSync.repoenTask(taskId);
-			}
-		} else {
-			//console.log('未找到 todoist_id');
-			//开始全文搜索，检查status更新
-			try {
-				if (!(await this.checkAndHandleSyncLock())) return;
-				await this.todoistSync.fullTextModifiedTaskCheck();
-				this.syncLock = false;
-			} catch (error) {
-				console.error(
-					`An error occurred while check modified tasks in the file: ${error}`,
-				);
-				this.syncLock = false;
+		// Look for the surrounding div that contains the checkbox, which should also contain the task text
+		const taskElement = target.closest("div"); 
+
+		if (taskElement) {
+			console.log('Task element found:', taskElement.textContent);
+
+			const taskId = this.taskParser.extractTodoistIdFromText(taskElement.textContent || "");
+			if (taskId) {
+				if (target.checked) {
+					this.todoistSync.closeTask(taskId);
+				} else {
+					this.todoistSync.reopenTask(taskId);
+				}
 			}
 		}
 	}

@@ -96,7 +96,7 @@ export class TaskParser {
 			labels: this.getAllTagsFromLineText(cleanedText),
 			priority: this.getTaskPriority(cleanedText),
 			isCompleted: this.isTaskCheckboxChecked(cleanedText),
-			todoistId: this.getTodoistIdFromLineText(cleanedText),
+			todoistId: this.extractTodoistIdFromText(cleanedText),
 		} as TaskObject;
 
 		// Config
@@ -135,7 +135,7 @@ export class TaskParser {
 				// Lower indentation found, check if it has todoist id
 				if (this.getIndentation(line) <	this.getIndentation(lineText)) {
 					if (this.hasTodoistId(line)) {
-						task.parentId = this.getTodoistIdFromLineText(line);
+						task.parentId = this.extractTodoistIdFromText(line);
 						task.hasParent = true;
 						console.log(`Found parent task with id ${task.parentId} for task ${task.content}`)
 						break;
@@ -195,7 +195,7 @@ export class TaskParser {
 		return text.match(REGEX.PROJECT_NAME)?.[1] ?? null;
 	}
 
-	getTodoistIdFromLineText(text: string): string | null {
+	extractTodoistIdFromText(text: string): string | null {
 		return text.match(REGEX.TODOIST_ID_NUM)?.[1] ?? null;
 	}
 
@@ -283,9 +283,6 @@ export class TaskParser {
 		}
 
 		if ((lineTaskDue || todoistTaskDue) === "") {
-			console.log(lineTaskDue);
-			console.log(todoistTaskDue);
-			//console.log('due date 发生了变化')
 			return false;
 		}
 

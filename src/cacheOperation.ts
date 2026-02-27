@@ -1,5 +1,6 @@
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
+import { Task } from "@doist/todoist-api-typescript";
 
 interface Due {
 	date?: string;
@@ -216,21 +217,16 @@ export class CacheOperation {
 		}
 	}
 
-	// 追加到 Cache 文件
-	appendTaskToCache(task) {
-		try {
-			if (task === null) {
-				return;
-			}
-			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-			//const taskAlreadyExists = savedTasks.some((t) => t.id === task.id);
-			//if (!taskAlreadyExists) {
-			//，使用push方法将字符串插入到Cache对象时，它将被视为一个简单的键值对，其中键是数组的数字索引，而值是该字符串本身。但如果您使用push方法将另一个Cache对象（或数组）插入到Cache对象中，则该对象将成为原始Cache对象的一个嵌套子对象。在这种情况下，键是数字索引，值是嵌套的Cache对象本身。
-			//}
-			this.plugin.settings.todoistTasksData.tasks.push(task);
-		} catch (error) {
-			console.error(`Error appending task to Cache: ${error}`);
+	/**
+	 * Add a Todoist task object to Cache
+	 * @param task Task
+	 * @returns void
+	 */
+	appendTaskToCache(task: Task): void {
+		if (task === null) {
+			return;
 		}
+		this.plugin.settings.todoistTasksData.tasks.push(task);
 	}
 
 	//读取指定id的任务
@@ -319,7 +315,7 @@ export class CacheOperation {
 	}
 
 	//close a task status
-	closeTaskToCacheByID(taskId: string): Promise<void> {
+	closeTaskToCacheByID(taskId: string): void {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 

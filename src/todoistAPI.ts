@@ -1,7 +1,5 @@
 import {
 	TodoistApi as DoistApi,
-	PersonalProject,
-	WorkspaceProject,
 	Task,
 	AddTaskArgs
 } from "@doist/todoist-api-typescript";
@@ -25,7 +23,6 @@ export class TodoistAPI {
 		// Initialize API object and return it
 		const token = this.plugin.settings.todoistAPIToken;
 		const api = new DoistApi(token);
-		console.log("API initialized");
 		return api;
 	}
 
@@ -67,6 +64,14 @@ export class TodoistAPI {
 			return newTask;
 		} catch (error) {
 			throw new Error(`Error adding task: ${error.message}`);
+		}
+	}
+
+	async closeTask(taskId: string): Promise<void> {
+		try {
+			await this.api.closeTask(taskId);
+		} catch (error) {
+			throw new Error(`Error closing task: ${error.message}`);
 		}
 	}
 }
