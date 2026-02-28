@@ -87,7 +87,7 @@ export default class Obsidianist extends Plugin {
 				if (!this.checkModuleClass()) {
 					return;
 				}
-				this.lineNumberCheck();
+				this.checkLineChanges();
 			}
 			if (evt.key === "Delete" || evt.key === "Backspace") {
 				try {
@@ -116,19 +116,13 @@ export default class Obsidianist extends Plugin {
 
 			if (target.type === "checkbox") {
 				this.checkboxEventhandle(evt);
-				return
-			}
-
-			if (this.app.workspace.activeEditor?.editor?.hasFocus()) {
-				//console.log('Click event: editor is focused');
-				const view =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				const editor = this.app.workspace.activeEditor?.editor;
-				this.lineNumberCheck();
+			} else if (this.app.workspace.activeEditor?.editor?.hasFocus()) {
+				// User cliecked somewhere in the editor, check if line number changed to trigger modified task check
+				this.checkLineChanges();
 			} else {
-				//
+				// Not in editor, do nothing
 			}
-
+			return;
 			
 		});
 
@@ -378,8 +372,14 @@ export default class Obsidianist extends Plugin {
 		this.todoistSync = new TodoistSync(this.app, this);
 	}
 
-	async lineNumberCheck() {
-		console.log("lineNumberCheck")
+	/**
+	 * Check if the line number has changed, if changed, trigger modified task check for the line text.
+	 * This is used to detect task modification that can not be detected by checkbox click or file modify, such as task description modification, task move, etc.
+	 * The modified task check will compare the line text before and after modification, if the line text is different, it will trigger the modified task check.
+	 * @returns 
+	 */
+	async checkLineChanges() {
+		this.debugLog(`Checking line changes...`);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (view) {
 			const cursor = view.app.workspace
@@ -388,8 +388,6 @@ export default class Obsidianist extends Plugin {
 			const line = cursor?.line;
 			const fileContent = view.data;
 
-			//console.log(line)
-			//const fileName = view.file?.name
 			const fileName =
 				view.app.workspace.getActiveViewOfType(MarkdownView)?.app
 					.workspace.activeEditor?.file?.name;
@@ -404,21 +402,13 @@ export default class Obsidianist extends Plugin {
 				return;
 			}
 
-			//console.log(`filename is ${fileName}`)
 			if (
 				this.lastLines.has(fileName as string) &&
 				line !== this.lastLines.get(fileName as string)
 			) {
 				const lastLine = this.lastLines.get(fileName as string);
-				if (this.settings.debugMode) {
-					console.log(
-						"Line changed!",
-						`current line is ${line}`,
-						`last line is ${lastLine}`,
-					);
-				}
-
-				// 执行你想要的操作
+				this.debugLog(`Line changed! current line is ${line}, last line is ${lastLine}`);
+				
 				const lastLineText = view.editor.getLine(lastLine as number);
 
 				this.lastLines.set(fileName as string, line as number);
@@ -437,8 +427,6 @@ export default class Obsidianist extends Plugin {
 					);
 					this.syncLock = false;
 				}
-			} else {
-				//console.log('Line not changed');
 			}
 		}
 	}
@@ -651,5 +639,11 @@ export default class Obsidianist extends Plugin {
 
 	releaseSyncLock() {
 		this.syncLock = false
+	}
+
+	debugLog(message: string) {
+		if (this.settings.debugMode) {
+			console.debug(message);
+		}
 	}
 }
