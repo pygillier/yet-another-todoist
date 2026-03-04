@@ -62,48 +62,39 @@ export default class Obsidianist extends Plugin {
 
 		//key 事件监听，判断换行和删除
 		this.registerDomEvent(document, "keyup", async (evt: KeyboardEvent) => {
-			if (!this.settings.apiInitialized) {
-				return;
-			}
-			//console.log(`key pressed`)
+			const trackedKeys = [
+				"ArrowUp",
+				"ArrowDown",
+				"ArrowLeft",
+				"ArrowRight",
+				"PageUp",
+				"PageDown"
+			];
+			
+			// Track only if the editor has focus, to avoid unnecessary check when user is typing in other input box, such as setting input box
+			if (this.app.workspace.activeEditor?.editor?.hasFocus()) {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				const editor = view?.app.workspace.activeEditor?.editor;
 
-			//判断点击事件发生的区域,如果不在编辑器中，return
-			if (!this.app.workspace.activeEditor?.editor?.hasFocus()) {
-				console.log(`editor is not focused`);
-				return;
-			}
-			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			const editor = view?.app.workspace.activeEditor?.editor;
-
-			if (
-				evt.key === "ArrowUp" ||
-				evt.key === "ArrowDown" ||
-				evt.key === "ArrowLeft" ||
-				evt.key === "ArrowRight" ||
-				evt.key === "PageUp" ||
-				evt.key === "PageDown"
-			) {
-				console.log(`${evt.key} arrow key is released`);
-				if (!this.checkModuleClass()) {
-					return;
+				// If the key is one of the tracked keys, check line changes to trigger modified task check
+				if (trackedKeys.includes(evt.key)) {
+					this.checkLineChanges();
 				}
-				this.checkLineChanges();
-			}
-			if (evt.key === "Delete" || evt.key === "Backspace") {
-				try {
-					//console.log(`${evt.key} key is released`);
-					if (!this.checkModuleClass()) {
-						return;
+
+				// Line editing keys Backspace and Delete, will trigger modified task check and deleted task check
+				if (["Delete", "Backspace"].includes(evt.key)) {
+					console.log(`Delete or Backspace key detected, checking line changes and deleted tasks...`);
+					try {
+						this.acquireSyncLock();
+						await this.todoistSync.deletedTaskCheck();
+						this.saveSettings();
+					} catch (error) {
+						console.error(
+							`An error occurred while deleting tasks: ${error}`,
+						);
+					} finally {
+						this.releaseSyncLock();
 					}
-					if (!(await this.checkAndHandleSyncLock())) return;
-					await this.todoistSync.deletedTaskCheck();
-					this.syncLock = false;
-					this.saveSettings();
-				} catch (error) {
-					console.error(
-						`An error occurred while deleting tasks: ${error}`,
-					);
-					this.syncLock = false;
 				}
 			}
 		});
@@ -245,10 +236,13 @@ export default class Obsidianist extends Plugin {
 			}),
 		);
 
+		/**
+		 * Scheduled synchronization task
+		 */
 		this.registerInterval(
 			window.setInterval(
 				async () => await this.scheduledSynchronization(),
-				this.settings.automaticSynchronizationInterval * 1000,
+				Number(this.settings.automaticSynchronizationInterval) * 1000,
 			),
 		);
 
@@ -500,29 +494,17 @@ export default class Obsidianist extends Plugin {
 	}
 
 	async scheduledSynchronization(): Promise<void> {
-		if (!this.checkModuleClass()) {
-			return;
-		}
 		console.log(
 			"Todoist scheduled synchronization task started at",
 			new Date().toLocaleString(),
 		);
 		try {
-			if (!(await this.checkAndHandleSyncLock())) return;
-			try {
-				await this.todoistSync.syncTodoistToObsidian();
-			} catch (error) {
-				console.error(
-					"An error occurred in syncTodoistToObsidian:",
-					error,
-				);
-			}
+			// Sync todoist data to obsidian, including tasks, projects, labels, sections and comments.
+			await this.acquireSyncLock();
+			await this.todoistSync.syncTodoistToObsidian();
+			
 			this.syncLock = false;
-			try {
-				await this.saveSettings();
-			} catch (error) {
-				console.error("An error occurred in saveSettings:", error);
-			}
+			await this.saveSettings();
 
 			// Sleep for 5 seconds
 			await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -610,12 +592,12 @@ export default class Obsidianist extends Plugin {
 		if(this.syncLock === true)
 		{
 			// Lock is already set, wait for release
-			console.log("Waiting for SyncLock to release...")
+			this.debugLog("Waiting for SyncLock to release...")
 			let counter = 0
 			while (this.syncLock == true && counter < 10) {
 				await new Promise((resolve) => setTimeout(resolve, 1000));
 				counter++;
-				console.log(`{counter}/10`)
+				this.debugLog(`${counter}/10`)
 			}
 			if(this.syncLock === true)
 			{
@@ -625,19 +607,20 @@ export default class Obsidianist extends Plugin {
 			else
 			{
 				// Lock released from outside, take it
-				console.log("Acquiring sync lock")
+				this.debugLog("Acquiring sync lock")
 				this.syncLock = true
 			}
 		}
 		else
 		{
 			// Lock released from outside, take it
-			console.log("Acquiring sync lock")
+			this.debugLog("Acquiring sync lock")
 			this.syncLock = true
 		}
 	}
 
 	releaseSyncLock() {
+		this.debugLog("Releasing sync lock")
 		this.syncLock = false
 	}
 

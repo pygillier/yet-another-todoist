@@ -235,7 +235,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 						let options = {};
 						options.projectId = projectId;
 						const tasks =
-							await this.plugin.todoistRestAPI.GetActiveTasks(
+							await this.plugin.todoistAPI.getActiveTasks(
 								options,
 							);
 						let length = tasks.length;
@@ -280,7 +280,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 								//get from todoist
 								try {
 									taskObject =
-										await this.plugin.todoistRestAPI.getTaskById(
+										await this.plugin.todoistAPI.getTaskById(
 											taskId,
 										);
 								} catch (error) {

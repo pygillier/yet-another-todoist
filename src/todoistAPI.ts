@@ -1,7 +1,8 @@
 import {
 	TodoistApi as DoistApi,
 	Task,
-	AddTaskArgs
+	AddTaskArgs,
+	UpdateTaskArgs
 } from "@doist/todoist-api-typescript";
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
@@ -53,6 +54,47 @@ export class TodoistAPI {
 		}
 	}
 
+	async getActiveTasks(opts: {
+		projectId?: string;
+		section_id?: string;
+		label?: string;
+		filter?: string;
+		lang?: string;
+		ids?: Array<string>;
+	}) {
+
+		try {
+			let allTasks: Task[] = [];
+			let cursor = null;
+
+			do {
+				const tasks = await this.api.getTasks({
+					...opts,
+					cursor: cursor,
+					limit: 10,
+				});
+				cursor = tasks.nextCursor;
+				allTasks = [...allTasks, ...tasks.results];
+			} while (cursor != null);
+
+			return allTasks;
+		} catch (error) {
+			console.error("Error while fetching tasks:" + error);
+			new Notice("Unable to fetch all tasks, check API key");
+
+			return false;
+		}
+	}
+
+	async getTaskById(taskId: string): Promise<Task> {
+		try {
+			const task = await this.api.getTask(taskId);
+			return task;
+		} catch (error) {
+			throw new Error(`Error fetching task by ID: ${error.message}`);
+		}
+	}
+
 	async addTask(task: TaskObject): Promise<Task> {
 		try {
 			if (task.dueDate) {
@@ -67,11 +109,36 @@ export class TodoistAPI {
 		}
 	}
 
+	async updateTask(taskId: string, updatedFields: Partial<TaskObject>): Promise<Task> {
+		try {
+			const updatedTask = await this.api.updateTask(taskId, updatedFields as UpdateTaskArgs);
+			return updatedTask;
+		} catch (error) {
+			throw new Error(`Error updating task: ${error.message}`);
+		}
+	}
+
 	async closeTask(taskId: string): Promise<void> {
 		try {
 			await this.api.closeTask(taskId);
 		} catch (error) {
 			throw new Error(`Error closing task: ${error.message}`);
+		}
+	}
+
+	async deleteTask(taskId: string): Promise<void> {
+		try {
+			await this.api.deleteTask(taskId);
+		} catch (error) {
+			throw new Error(`Error deleting task: ${error.message}`);
+		}
+	}
+
+	async openTask(taskId: string): Promise<void> {
+		try {
+			await this.api.reopenTask(taskId);
+		} catch (error) {
+			throw new Error(`Error opening task: ${error.message}`);
 		}
 	}
 }
