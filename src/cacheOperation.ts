@@ -1,17 +1,11 @@
 import {App, TAbstractFile} from "obsidian";
 import Obsidianist from "../main";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
-import {Project} from "./interfaces";
+import {FileMetadata, LocalTask, Project} from "./interfaces";
 
 interface Due {
 	date?: string;
 	[key: string]: any; // allow for additional properties
-}
-
-interface FileMetadata {
-	todoistTasks: string[];
-	todoistCount: number;
-	defaultProjectId?: string;
 }
 
 export class CacheOperation {
@@ -32,7 +26,7 @@ export class CacheOperation {
 	}
 
 	async getFileMetadata(filepath: string): Promise<FileMetadata> {
-		return this.plugin.settings.fileMetadata[filepath] ?? {} as FileMetadata;
+		return this.plugin.settings.fileMetadata[filepath] ?? {todoistCount: 0, todoistTasks: []};
 	}
 
 	async getAllFileMetadata() {
@@ -190,13 +184,10 @@ export class CacheOperation {
 
 	/**
 	 * Add a Todoist task object to Cache
-	 * @param task Task
+	 * @param task LocalTask
 	 * @returns void
 	 */
-	appendTaskToCache(task: Task): void {
-		if (task === null) {
-			return;
-		}
+	appendTaskToCache(task: LocalTask): void {
 		this.plugin.settings.todoistTasksData.tasks.push(task);
 	}
 

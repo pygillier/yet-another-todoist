@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import Obsidianist from "../main";
-import TaskObject from './interfaces';
+import TaskObject, {ConversionArguments} from './interfaces';
 
 const keywords = {
 	TODOIST_TAG: "#todoist",
@@ -51,20 +51,15 @@ export class TaskParser {
 		this.plugin = plugin;
 	}
 
-	async convertTextToTaskObject(
-		lineText: string,
-		filepath: string,
-		fileContent: string,
-		lineNumber: number,
-	): Promise<TaskObject> {
+	async convertLineToTask(args: ConversionArguments): Promise<TaskObject> {
 		/**
 		 * Convert a line from the note to a TaskObject.
 		 */
 
-		console.log(`Line to parse: ${lineText}`)
+		console.log(`Line to parse: ${args.lineContent}`)
 
 		// Clean out text
-		const cleanedText = this.removeTaskIndentation(lineText)
+		const cleanedText = this.removeTaskIndentation(args.lineContent)
 
 		const task = {
 			hasParent: false,
@@ -77,14 +72,14 @@ export class TaskParser {
 		} as TaskObject;
 
 		// Config
-		const project = this.plugin.cacheOperation.getProjectForFile(filepath);
+		const project = this.plugin.cacheOperation.getProjectForFile(args.filePath);
 		task.projectId = project.projectId
 
-		if (filepath) {
+		if (args.filePath != "") {
 			const url = encodeURI(
-				`obsidian://open?vault=${this.app.vault.getName()}&file=${filepath}`,
+				`obsidian://open?vault=${this.app.vault.getName()}&file=${args.filePath}`,
 			);
-			task.description = `[${filepath}](${url})`;
+			task.description = `[${args.filePath}](${url})`;
 		}
 
 		/**
@@ -92,11 +87,11 @@ export class TaskParser {
 		 * 1. check previous lines until find a line with less indentation
 		 * 2. if the line has todoist id, then get parent id and parent task object from cache
 		 */
-		if (this.isIndentedTask(lineText)) {
-			const lines = fileContent?.split("\n") ?? [];
+		if (this.isIndentedTask(args.lineContent)) {
+			const lines = args.fileContent.split("\n") ?? [];
 
 			// Check each line, in reverse, until a line with less indentation or reach the top of the file
-			for (let i = lineNumber - 1; i >= 0; i--) {
+			for (let i = args.lineNumber - 1; i >= 0; i--) {
 				
 				const line = lines[i];
 
@@ -104,12 +99,12 @@ export class TaskParser {
 				if (this.isLineBlank(line)) { break;}
 
 				// Same or higher indentation, continue searching
-				if (this.getIndentation(line) >= this.getIndentation(lineText)) {
+				if (this.getIndentation(line) >= this.getIndentation(args.lineContent)) {
 					continue;
 				}
 
 				// Lower indentation found, check if it has todoist id
-				if (this.getIndentation(line) <	this.getIndentation(lineText)) {
+				if (this.getIndentation(line) <	this.getIndentation(args.lineContent)) {
 					if (this.hasTodoistId(line)) {
 						task.parentId = this.extractTodoistIdFromText(line);
 						task.hasParent = true;
@@ -121,7 +116,7 @@ export class TaskParser {
 				}
 			}
 		}
-		if (task.hasParent) {
+		if (task.hasParent && task.parentId) {
 			// Remap the task project to parent one.
 			const parentTask = this.plugin.cacheOperation?.loadTaskByID(task.parentId);
 			if (parentTask) {
@@ -131,8 +126,8 @@ export class TaskParser {
 		} else {
 			// Check if any of the tags in the task content matches a project in the cache, if so, assign the project id to the task.
 			for (const label of task.labels ?? []) {
-				let labelName = label.replace(/#/g, "");
-				let project =
+				const labelName = label.replace(/#/g, "");
+				const project =
 					this.plugin.cacheOperation?.getProjectIdByNameFromCache(
 						labelName,
 					);
@@ -142,8 +137,6 @@ export class TaskParser {
 				}
 			}
 		}
-
-		console.log(`Extracted task: ${JSON.stringify(task)}`)
 		return task;
 	}
 

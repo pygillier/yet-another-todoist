@@ -9,7 +9,7 @@ import {
 } from "@doist/todoist-api-typescript";
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
-import TaskObject, {Project} from "./interfaces";
+import TaskObject, {LocalTask, Project} from "./interfaces";
 import {localDateStringToUTCDatetimeString} from "./utils";
 
 export class TodoistAPI {
@@ -95,7 +95,7 @@ export class TodoistAPI {
 		}
 	}
 
-	async addTask(task: TaskObject): Promise<Task> {
+	async addTask(task: TaskObject): Promise<LocalTask> {
 		try {
 			if (task.dueDate) {
 				// @ts-ignore
@@ -103,7 +103,7 @@ export class TodoistAPI {
 				task.dueDate = null;
 			}
 
-			return await this.api.addTask(task as AddTaskArgs);
+			return await this.api.addTask(task as AddTaskArgs) as LocalTask;
 		} catch (error) {
 			throw new Error(`Error adding task: ${error.message}`);
 		}

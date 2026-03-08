@@ -2,6 +2,8 @@ import Obsidianist from "../main";
 import {App, Editor, MarkdownView, Notice} from "obsidian";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
 import {filterActivityEvents} from "./utils";
+import {lineNumbers} from "@codemirror/view";
+import {FileMetadata} from "./interfaces";
 
 export class TodoistSync {
 	app: App;
@@ -105,31 +107,24 @@ export class TodoistSync {
 		view: MarkdownView,
 	): Promise<void> {
 
-		const filepath = view.file?.path;
+		const filePath = view.file?.path ?? "";
 		const fileContent = view.data;
 		const cursor = editor.getCursor();
 		const line = cursor.line;
 		const linetxt = editor.getLine(line);
 
 		const extractedTask =
-			await this.plugin.taskParser.convertTextToTaskObject(
-				linetxt,
-				filepath,
-				fileContent,
-				line,
-			);
+			await this.plugin.taskParser.convertLineToTask({
+				lineContent: linetxt,
+				lineNumber: line,
+				fileContent: fileContent,
+				filePath: filePath
+			});
 
 		try {
 			const newTask =	await this.plugin.todoistAPI.addTask(extractedTask);
-
-			const {
-				id: todoist_id,
-				projectId: todoist_projectId,
-				url: todoist_url,
-			} = newTask;
 			
-			// @ts-ignore - This is a custom property we're adding to the Task object, so we can ignore the type error
-			newTask.path = filepath;
+			newTask.path = filePath;
 
 			new Notice(`new task ${newTask.content} id is ${newTask.id}`);
 
@@ -140,7 +135,7 @@ export class TodoistSync {
 				await this.plugin.todoistAPI.closeTask(newTask.id);
 				this.plugin.cacheOperation.closeTaskToCacheByID(newTask.id);
 			}
-			this.plugin.saveSettings();
+			await this.plugin.saveSettings();
 
 			// Insert the Todoist ID and link back to the task in the file
 			const text_with_out_link = `${linetxt} %%[todoist_id:: ${newTask.id}]%%`;
@@ -159,49 +154,22 @@ export class TodoistSync {
 				to,
 			);
 
-			//处理frontMatter
-			try {
-				// 处理 front matter
-				const frontMatter =
-					await this.plugin.cacheOperation.getFileMetadata(
-						filepath,
-					);
-				console.log(frontMatter);
-
-				if (!frontMatter) {
-					//console.log('frontmatter is empty');
-					//return;
-				}
-
-				// 将 todoistCount 加 1
-				const newFrontMatter = { ...frontMatter };
-				newFrontMatter.todoistCount =
-					(newFrontMatter.todoistCount ?? 0) + 1;
-
-				// 记录 taskID
-				newFrontMatter.todoistTasks = [
-					...(newFrontMatter.todoistTasks || []),
-					todoist_id,
-				];
-
-				// 更新 front matter
-				/*
-					this.plugin.fileOperation.updateFrontMatter(view.file, (frontMatter) => {
-					frontMatter.todoistTasks = newFrontMatter.todoistTasks;
-					frontMatter.todoistCount = newFrontMatter.todoistCount;
-					});
-					*/
-				//console.log(newFrontMatter)
-				await this.plugin.cacheOperation.updateFileMetadata(
-					filepath,
-					newFrontMatter,
+			// Update file metadata in cache
+			const metadata: FileMetadata =
+				await this.plugin.cacheOperation.getFileMetadata(
+					filePath,
 				);
-			} catch (error) {
-				console.error(error);
-			}
+
+			metadata.todoistTasks.push(newTask.id);
+			metadata.todoistCount = metadata.todoistTasks.length;
+
+			await this.plugin.cacheOperation.updateFileMetadata(
+				filePath,
+				metadata,
+			);
 		} catch (error) {
 			console.error("Error adding task:", error);
-			console.log(`The error occurred in the file: ${filepath}`);
+			console.log(`The error occurred in the file: ${filePath}`);
 			return;
 		}
 	}
@@ -260,11 +228,12 @@ export class TodoistSync {
 				//console.log(`line text: ${line}`)
 				console.log(filepath);
 				const currentTask =
-					await this.plugin.taskParser.convertTextToTaskObject(
-						line,
-						filepath,
-						i,
-						content,
+					await this.plugin.taskParser.convertLineToTask({
+						lineContent: line,
+						lineNumber: i,
+						fileContent: content ?? "",
+						filePath: filepath ?? "",
+						}
 					);
 				if (typeof currentTask === "undefined") {
 					continue;
@@ -372,13 +341,13 @@ export class TodoistSync {
 			this.plugin.taskParser.hasTodoistTag(lineText)
 		) {
 			const lineTask =
-				await this.plugin.taskParser.convertTextToTaskObject(
-					lineText,
-					filepath,
-					lineNumber,
-					fileContent,
-				);
-			//console.log(lastLineTask)
+				await this.plugin.taskParser.convertLineToTask({
+					lineContent: lineText,
+					lineNumber: lineNumber,
+					fileContent: fileContent,
+					filePath: filepath
+				});
+
 			const lineTask_todoist_id = lineTask.todoistId.toString();
 			//console.log(lineTask_todoist_id )
 			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)

@@ -23,6 +23,24 @@ export default interface TaskObject {
 
 export interface TodoistTaskData {
 	projects: Project[];
-	tasks: Task[];
+	tasks: LocalTask[];
 	events: ActivityEvent[];
+}
+
+export interface FileMetadata {
+	todoistTasks: string[];
+	todoistCount: number;
+	defaultProjectId?: string;
+}
+
+export interface ConversionArguments {
+	lineContent: string,
+	lineNumber: number,
+	fileContent: string,
+	filePath: string
+}
+
+// Enriched todoist task with obsidianist resources
+export type LocalTask = Task & {
+	path?: string,
 }

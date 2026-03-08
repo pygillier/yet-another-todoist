@@ -196,7 +196,6 @@ export default class Obsidianist extends Plugin {
 		//Listen for file modified events and execute fullTextNewTaskCheck
 		this.registerEvent(
 			this.app.vault.on("modify", async (file) => {
-				console.log("MODIFU")
 				try {
 					if (!this.settings.apiInitialized) {
 						return;
