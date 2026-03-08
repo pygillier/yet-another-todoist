@@ -20,7 +20,7 @@ import { FileOperation } from "./src/fileOperation";
 import { TodoistSync } from "./src/syncModule";
 
 //import modal
-import { SetDefalutProjectInTheFilepathModal } from "src/modal";
+import { DefaultProjectModal } from "src/modal";
 
 export default class Obsidianist extends Plugin {
 	settings: ObsidianistSettings;
@@ -250,17 +250,13 @@ export default class Obsidianist extends Plugin {
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: "set-default-project-for-todoist-task-in-the-current-file",
-			name: "Set default project for todoist task in the current file",
+			name: "Set default project for current file",
 			editorCallback: (editor: Editor, view: MarkdownView) => {
 				if (!view) {
 					return;
 				}
-				const filepath = view.file?.path;
-				new SetDefalutProjectInTheFilepathModal(
-					this.app,
-					this,
-					filepath,
-				);
+				const filepath = view.file?.path ?? null;
+				new DefaultProjectModal(this.app, { plugin: this, filepath });
 			},
 		});
 

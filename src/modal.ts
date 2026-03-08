@@ -1,18 +1,13 @@
 import { App, Modal, Setting } from "obsidian";
 import Obsidianist from "../main";
 
-interface MyProject {
-	id: string;
-	name: string;
-}
-
-export class SetDefalutProjectInTheFilepathModal extends Modal {
+export class DefaultProjectModal extends Modal {
 	defaultProjectId: string;
 	defaultProjectName: string;
-	filepath: string;
+	filepath: string | null;
 	plugin: Obsidianist;
 
-	constructor(app: App, plugin: Obsidianist, filepath: string) {
+	constructor(app: App, { plugin, filepath = null }: { plugin: Obsidianist; filepath?: string | null }) {
 		super(app);
 		this.filepath = filepath;
 		this.plugin = plugin;
@@ -26,6 +21,11 @@ export class SetDefalutProjectInTheFilepathModal extends Modal {
 			text: "Set default project for todoist tasks in the current file",
 		});
 
+		if (!this.filepath) {
+			contentEl.createEl("p", { text: "No file is currently open." });
+			return;
+		}
+
 		this.defaultProjectId =
 			await this.plugin.cacheOperation.getDefaultProjectIdForFilepath(
 				this.filepath,
@@ -36,14 +36,15 @@ export class SetDefalutProjectInTheFilepathModal extends Modal {
 			);
 		console.log(this.defaultProjectId);
 		console.log(this.defaultProjectName);
-		const myProjectsOptions: MyProject | undefined =
+		const filepath = this.filepath;
+		const myProjectsOptions: Record<string, string> =
 			this.plugin.settings.todoistTasksData?.projects?.reduce(
-				(obj, item) => {
+				(obj: Record<string, string>, item: { id: string | number; name: string }) => {
 					obj[item.id.toString()] = item.name;
 					return obj;
 				},
 				{},
-			);
+			) ?? {};
 
 		new Setting(contentEl)
 			.setName("Default project")
@@ -54,11 +55,8 @@ export class SetDefalutProjectInTheFilepathModal extends Modal {
 					.addOptions(myProjectsOptions)
 					.onChange((value) => {
 						console.log(`project id  is ${value}`);
-						//this.plugin.settings.defaultProjectId = this.result
-						//this.plugin.settings.defaultProjectName = this.plugin.cacheOperation.getProjectNameByIdFromCache(this.result)
-						//this.plugin.saveSettings()
 						this.plugin.cacheOperation.setDefaultProjectIdForFilepath(
-							this.filepath,
+							filepath,
 							value,
 						);
 						this.plugin.setStatusBarText();
@@ -68,7 +66,7 @@ export class SetDefalutProjectInTheFilepathModal extends Modal {
 	}
 
 	onClose() {
-		let { contentEl } = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
