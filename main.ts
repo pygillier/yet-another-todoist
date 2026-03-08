@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Plugin, Editor, WorkspaceLeaf } from "obsidian";
+import { MarkdownView, Notice, Plugin, Editor } from "obsidian";
 
 //settings
 import {
@@ -73,8 +73,6 @@ export default class Obsidianist extends Plugin {
 			
 			// Track only if the editor has focus, to avoid unnecessary check when user is typing in other input box, such as setting input box
 			if (this.app.workspace.activeEditor?.editor?.hasFocus()) {
-				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-				const editor = view?.app.workspace.activeEditor?.editor;
 
 				// If the key is one of the tracked keys, check line changes to trigger modified task check
 				if (trackedKeys.includes(evt.key)) {
@@ -85,9 +83,9 @@ export default class Obsidianist extends Plugin {
 				if (["Delete", "Backspace"].includes(evt.key)) {
 					console.log(`Delete or Backspace key detected, checking line changes and deleted tasks...`);
 					try {
-						this.acquireSyncLock();
+						await this.acquireSyncLock();
 						await this.todoistSync.deletedTaskCheck();
-						this.saveSettings();
+						await this.saveSettings();
 					} catch (error) {
 						console.error(
 							`An error occurred while deleting tasks: ${error}`,
@@ -250,7 +248,7 @@ export default class Obsidianist extends Plugin {
 			this.setStatusBarText();
 		});
 
-		// set default  project for todoist task in the current file
+		// set the default project for a todoist task in the current file
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: "set-default-project-for-todoist-task-in-the-current-file",
@@ -259,7 +257,7 @@ export default class Obsidianist extends Plugin {
 				if (!view) {
 					return;
 				}
-				const filepath = view.file.path;
+				const filepath = view.file?.path;
 				new SetDefalutProjectInTheFilepathModal(
 					this.app,
 					this,
@@ -305,7 +303,7 @@ export default class Obsidianist extends Plugin {
 		}
 	}
 
-	async modifyTodoistAPI(api: string) {
+	async modifyTodoistAPI() {
 		await this.initializePlugin();
 	}
 
@@ -321,8 +319,6 @@ export default class Obsidianist extends Plugin {
 			new Notice("Please enter your Todoist API token in the settings.");
 			return;
 		}
-		//initialize todoist restapi
-		this.todoistRestAPI = new TodoistRestAPI(this.app, this);
 		this.todoistAPI = new TodoistAPI(this.app, this);
 
 		//initialize data read and write object
@@ -438,9 +434,9 @@ export default class Obsidianist extends Plugin {
 			const taskId = this.taskParser.extractTodoistIdFromText(taskElement.textContent || "");
 			if (taskId) {
 				if (target.checked) {
-					this.todoistSync.closeTask(taskId);
+					await this.todoistSync.closeTask(taskId);
 				} else {
-					this.todoistSync.reopenTask(taskId);
+					await this.todoistSync.reopenTask(taskId);
 				}
 			}
 		}
@@ -448,7 +444,7 @@ export default class Obsidianist extends Plugin {
 
 	//return true
 	checkModuleClass(): boolean {
-		if (this.settings.apiInitialized === true) {
+		if (this.settings.apiInitialized) {
 			if (
 				this.todoistRestAPI === undefined ||
 				this.todoistSyncAPI === undefined ||
@@ -493,6 +489,10 @@ export default class Obsidianist extends Plugin {
 		}
 	}
 
+	/**
+	 * Sync todoist data to obsidian, including tasks, projects, labels, sections, and comments.
+	 * @returns
+	 */
 	async scheduledSynchronization(): Promise<void> {
 		console.log(
 			"Todoist scheduled synchronization task started at",
@@ -503,76 +503,28 @@ export default class Obsidianist extends Plugin {
 			await this.acquireSyncLock();
 			await this.todoistSync.syncTodoistToObsidian();
 			
-			this.syncLock = false;
+			this.releaseSyncLock();
 			await this.saveSettings();
-
-			// Sleep for 5 seconds
-			await new Promise((resolve) => setTimeout(resolve, 5000));
-
-			const filesToSync = this.settings.fileMetadata;
-			if (this.settings.debugMode) {
-				console.log(filesToSync);
-			}
-
-			for (let fileKey in filesToSync) {
-				if (this.settings.debugMode) {
-					console.log(fileKey);
-				}
-
-				if (!(await this.checkAndHandleSyncLock())) return;
-				try {
-					await this.todoistSync.fullTextNewTaskCheck(fileKey);
-				} catch (error) {
-					console.error(
-						"An error occurred in fullTextNewTaskCheck:",
-						error,
-					);
-				}
-				this.syncLock = false;
-
-				if (!(await this.checkAndHandleSyncLock())) return;
-				try {
-					await this.todoistSync.deletedTaskCheck(fileKey);
-				} catch (error) {
-					console.error(
-						"An error occurred in deletedTaskCheck:",
-						error,
-					);
-				}
-				this.syncLock = false;
-
-				if (!(await this.checkAndHandleSyncLock())) return;
-				try {
-					await this.todoistSync.fullTextModifiedTaskCheck(fileKey);
-				} catch (error) {
-					console.error(
-						"An error occurred in fullTextModifiedTaskCheck:",
-						error,
-					);
-				}
-				this.syncLock = false;
-			}
 		} catch (error) {
 			console.error("An error occurred:", error);
 			new Notice("An error occurred:", error);
 			this.syncLock = false;
+		} finally {
+			console.log(
+				"Todoist scheduled synchronization task completed at",
+				new Date().toLocaleString(),
+			);
 		}
-		console.log(
-			"Todoist scheduled synchronization task completed at",
-			new Date().toLocaleString(),
-		);
+
 	}
 
 	async checkSyncLock() {
 		let checkCount = 0;
-		while (this.syncLock == true && checkCount < 10) {
+		while (this.syncLock && checkCount < 10) {
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 			checkCount++;
 		}
-		if (this.syncLock == true) {
-			return false;
-		}
-		return true;
+		return !this.syncLock;
 	}
 
 	async checkAndHandleSyncLock() {
@@ -589,19 +541,19 @@ export default class Obsidianist extends Plugin {
 	}
 
 	async acquireSyncLock() {
-		if(this.syncLock === true)
+		if(this.syncLock)
 		{
 			// Lock is already set, wait for release
 			this.debugLog("Waiting for SyncLock to release...")
 			let counter = 0
-			while (this.syncLock == true && counter < 10) {
+			while (this.syncLock && counter < 10) {
 				await new Promise((resolve) => setTimeout(resolve, 1000));
 				counter++;
 				this.debugLog(`${counter}/10`)
 			}
-			if(this.syncLock === true)
+			if(this.syncLock)
 			{
-				// Lock still not released
+				// Lock still isn't released
 				throw new Error("Unable to acquire sync lock")
 			}
 			else

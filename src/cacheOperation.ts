@@ -1,6 +1,8 @@
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
-import { Task } from "@doist/todoist-api-typescript";
+import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
+import {Runtime} from "node:inspector";
+import Timestamp = module
 
 interface Due {
 	date?: string;
@@ -15,6 +17,14 @@ export class CacheOperation {
 		//super(app,settings);
 		this.app = app;
 		this.plugin = plugin;
+	}
+
+	getLastSyncTime(): Date {
+		return new Date(this.plugin.settings.lastSyncTime);
+	}
+
+	updateLastSyncTime(lastSyncTime: Date): void {
+		this.plugin.settings.lastSyncTime = lastSyncTime.getTime();
 	}
 
 	async getFileMetadata(filepath: string) {
@@ -189,17 +199,7 @@ export class CacheOperation {
 		}
 	}
 
-	// append event 到 Cache
-	appendEventToCache(event: Object[]) {
-		try {
-			this.plugin.settings.todoistTasksData.events.push(event);
-		} catch (error) {
-			console.error(`Error append event to Cache: ${error}`);
-		}
-	}
-
-	// append events 到 Cache
-	appendEventsToCache(events: Object[]) {
+	appendEventsToCache(events: ActivityEvent[]) {
 		try {
 			this.plugin.settings.todoistTasksData.events.push(...events);
 		} catch (error) {
@@ -207,11 +207,9 @@ export class CacheOperation {
 		}
 	}
 
-	// 从 Cache 文件中读取所有events
 	loadEventsFromCache() {
 		try {
-			const savedEvents = this.plugin.settings.todoistTasksData.events;
-			return savedEvents;
+			return this.plugin.settings.todoistTasksData.events;
 		} catch (error) {
 			console.error(`Error loading events from Cache: ${error}`);
 		}
@@ -230,16 +228,14 @@ export class CacheOperation {
 	}
 
 	//读取指定id的任务
-	loadTaskFromCacheID(taskId) {
+	loadTaskFromCacheID(taskId: string) {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-			//console.log(savedTasks)
 			const savedTask = savedTasks.find((t) => t.id === taskId);
-			//console.log(savedTask)
 			return savedTask;
 		} catch (error) {
 			console.error(`Error finding task from Cache: ${error}`);
-			return [];
+			return {};
 		}
 	}
 
@@ -299,18 +295,15 @@ export class CacheOperation {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 
-			// 遍历数组以查找具有指定 ID 的项
 			for (let i = 0; i < savedTasks.length; i++) {
 				if (savedTasks[i].id === taskId) {
-					// 修改对象的属性
 					savedTasks[i].isCompleted = false;
-					break; // 找到并修改了该项，跳出循环
+					break;
 				}
 			}
 			this.plugin.settings.todoistTasksData.tasks = savedTasks;
 		} catch (error) {
 			console.error(`Error open task to Cache file: ${error}`);
-			return [];
 		}
 	}
 
@@ -319,18 +312,16 @@ export class CacheOperation {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 
-			// 遍历数组以查找具有指定 ID 的项
 			for (let i = 0; i < savedTasks.length; i++) {
 				if (savedTasks[i].id === taskId) {
-					// 修改对象的属性
 					savedTasks[i].isCompleted = true;
-					break; // 找到并修改了该项，跳出循环
+					break;
 				}
 			}
 			this.plugin.settings.todoistTasksData.tasks = savedTasks;
 		} catch (error) {
 			console.error(`Error close task to Cache file: ${error}`);
-			throw error; // 抛出错误使调用方能够捕获并处理它
+			throw error;
 		}
 	}
 
@@ -389,22 +380,22 @@ export class CacheOperation {
 		}
 	}
 
-	//save projects data to json file
+	/**
+	 * Save projects to cache.
+	 */
 	async saveProjectsToCache() {
 		try {
-			//get projects
 			const projects = await this.plugin.todoistAPI.getAllProjects();
 			if (!projects) {
 				return false;
 			}
 
-			//save to json
 			this.plugin.settings.todoistTasksData.projects = projects;
 
 			return true;
 		} catch (error) {
-			return false;
 			console.log(`error downloading projects: ${error}`);
+			return false;
 		}
 	}
 

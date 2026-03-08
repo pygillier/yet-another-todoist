@@ -1,106 +1,80 @@
-import { App } from "obsidian";
+import {App, TFile} from "obsidian";
 import Obsidianist from "../main";
+import {ActivityEvent} from "@doist/todoist-api-typescript";
+import {file} from "zod";
 export class FileOperation {
 	app: App;
 	plugin: Obsidianist;
 
 	constructor(app: App, plugin: Obsidianist) {
-		//super(app,settings);
 		this.app = app;
 		this.plugin = plugin;
 	}
-	/*
-    async getFrontMatter(file:TFile): Promise<FrontMatter | null> {
-        return new Promise((resolve) => {
-          this.app.fileManager.processFrontMatter(file, (frontMatter) => {
-            resolve(frontMatter);
-          });
-        });
-    }
-    */
 
-	/*
-    async updateFrontMatter(
-    file:TFile,
-    updater: (frontMatter: FrontMatter) => void
-    ): Promise<void> {
-        //console.log(`prepare to update front matter`)
-        this.app.fileManager.processFrontMatter(file, (frontMatter) => {
-        if (frontMatter !== null) {
-        const updatedFrontMatter = { ...frontMatter } as FrontMatter;
-        updater(updatedFrontMatter);
-        this.app.fileManager.processFrontMatter(file, (newFrontMatter) => {
-            if (newFrontMatter !== null) {
-            newFrontMatter.todoistTasks = updatedFrontMatter.todoistTasks;
-            newFrontMatter.todoistCount = updatedFrontMatter.todoistCount;
-            }
-        });
-        }
-    });
-    }
-    */
+	/**
+	 * Mark a task as completed (checkbox checked) in related file.
+	 *
+	 * @param taskId
+	 */
+	async completeTaskInFile(taskId: string) {
 
-	// 完成一个任务，将其标记为已完成
-	async completeTaskInTheFile(taskId: string) {
-		// 获取任务文件路径
-		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
-		const filepath = currentTask.path;
+		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 
-		// 获取文件对象并更新内容
-		const file = this.app.vault.getAbstractFileByPath(filepath);
-		const content = await this.app.vault.read(file);
+		const content = await this.readContentFromFilePath(currentTask.path)
 
-		const lines = content.split("\n");
-		let modified = false;
+		// File exists with content
+		if (typeof content === "string") {
+			const lines = content.split("\n");
+			let modified = false;
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (
-				line.includes(taskId) &&
-				this.plugin.taskParser.hasTodoistTag(line)
-			) {
-				lines[i] = line.replace("[ ]", "[x]");
-				modified = true;
-				break;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (
+					line.includes(taskId) &&
+					this.plugin.taskParser.hasTodoistTag(line)
+				) {
+					lines[i] = line.replace("[ ]", "[x]");
+					modified = true;
+					break;
+				}
 			}
-		}
 
-		if (modified) {
-			const newContent = lines.join("\n");
-			await this.app.vault.modify(file, newContent);
+			if (modified) {
+				const newContent = lines.join("\n");
+				await this.writeContentToFile(currentTask.path, newContent)
+			}
 		}
 	}
 
-	// uncheck 已完成的任务，
-	async uncompleteTaskInTheFile(taskId: string) {
+	async uncompleteTaskInFile(taskId: string) {
 		// 获取任务文件路径
 		const currentTask =
 			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
-		// 获取文件对象并更新内容
-		const file = this.app.vault.getAbstractFileByPath(filepath);
-		const content = await this.app.vault.read(file);
+		const content = await this.readContentFromFilePath(filepath);
 
-		const lines = content.split("\n");
-		let modified = false;
+		// File exists with content
+		if (typeof content === "string") {
+			const lines = content.split("\n");
+			let modified = false;
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (
-				line.includes(taskId) &&
-				this.plugin.taskParser.hasTodoistTag(line)
-			) {
-				lines[i] = line.replace(/- \[(x|X)\]/g, "- [ ]");
-				modified = true;
-				break;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (
+					line.includes(taskId) &&
+					this.plugin.taskParser.hasTodoistTag(line)
+				) {
+					lines[i] = line.replace(/- \[(x|X)\]/g, "- [ ]");
+					modified = true;
+					break;
+				}
 			}
-		}
 
-		if (modified) {
-			const newContent = lines.join("\n");
-			await this.app.vault.modify(file, newContent);
+			if (modified) {
+				const newContent = lines.join("\n");
+				await this.writeContentToFile(currentTask.path, newContent);
+			}
 		}
 	}
 
@@ -251,153 +225,163 @@ export class FileOperation {
 	}
 
 	// sync updated task content  to file
-	async syncUpdatedTaskContentToTheFile(evt: Object) {
-		const taskId = evt.object_id;
-		// 获取任务文件路径
-		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
+	async syncUpdatedTaskContentToTheFile(evt: ActivityEvent) {
+
+		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(evt.objectId);
 		const filepath = currentTask.path;
 
-		// 获取文件对象并更新内容
-		const file = this.app.vault.getAbstractFileByPath(filepath);
-		const content = await this.app.vault.read(file);
+		const content = await this.readContentFromFilePath(filepath);
 
-		const lines = content.split("\n");
-		let modified = false;
+		if (typeof content === "string") {
+			const lines = content.split("\n");
+			let modified = false;
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (
-				line.includes(taskId) &&
-				this.plugin.taskParser.hasTodoistTag(line)
-			) {
-				const oldTaskContent =
-					this.plugin.taskParser.getTaskContentFromLineText(line);
-				const newTaskContent = evt.extra_data.content;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (
+					line.includes(evt.objectId) &&
+					this.plugin.taskParser.hasTodoistTag(line)
+				) {
+					const oldTaskContent =
+						this.plugin.taskParser.getTaskContentFromLineText(line);
+					const newTaskContent = evt.extraData?.content ?? "";
 
-				lines[i] = line.replace(oldTaskContent, newTaskContent);
-				modified = true;
-				break;
+					lines[i] = line.replace(oldTaskContent, newTaskContent);
+					modified = true;
+					break;
+				}
 			}
-		}
-
-		if (modified) {
-			const newContent = lines.join("\n");
-			//console.log(newContent)
-			await this.app.vault.modify(file, newContent);
+			if (modified) {
+				const newContent = lines.join("\n");
+				await this.writeContentToFile(filepath, newContent);
+			}
 		}
 	}
 
-	// sync updated task due date  to the file
-	async syncUpdatedTaskDueDateToTheFile(evt: Object) {
-		const taskId = evt.object_id;
-		// 获取任务文件路径
-		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
-		const filepath = currentTask.path;
+	/**
+	 * Sync updated due date to related file
+	 * @param evt
+	 */
+	async syncUpdatedTaskDueDateToFile(evt: ActivityEvent) {
 
-		// 获取文件对象并更新内容
-		const file = this.app.vault.getAbstractFileByPath(filepath);
-		const content = await this.app.vault.read(file);
+		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(evt.objectId);
+		const filepath: string = currentTask.path;
 
-		const lines = content.split("\n");
-		let modified = false;
+		const content = await this.readContentFromFilePath(filepath);
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (
-				line.includes(taskId) &&
-				this.plugin.taskParser.hasTodoistTag(line)
-			) {
-				const oldTaskDueDate =
-					this.plugin.taskParser.getDueDateFromLineText(line) || "";
-				const newTaskDueDate =
-					this.plugin.taskParser.ISOStringToLocalDateString(
-						evt.extra_data.due_date,
-					) || "";
+		// File exists with content
+		if (typeof content === "string") {
+			const lines = content.split("\n");
+			let modified = false;
 
-				//console.log(`${taskId} duedate is updated`)
-				console.log(oldTaskDueDate);
-				console.log(newTaskDueDate);
-				if (oldTaskDueDate === "") {
-					//console.log(this.plugin.taskParser.insertDueDateBeforeTodoist(line,newTaskDueDate))
-					lines[i] =
-						this.plugin.taskParser.insertDueDateBeforeTodoist(
-							line,
-							newTaskDueDate,
-						);
-					modified = true;
-				} else if (newTaskDueDate === "") {
-					//remove 日期from text
-					const regexRemoveDate = /(🗓️|📅|📆|🗓)\s?\d{4}-\d{2}-\d{2}/; //匹配日期🗓️2023-03-07"
-					lines[i] = line.replace(regexRemoveDate, "");
-					modified = true;
-				} else {
-					lines[i] = line.replace(oldTaskDueDate, newTaskDueDate);
-					modified = true;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (
+					line.includes(evt.objectId) &&
+					this.plugin.taskParser.hasTodoistTag(line)
+				) {
+					const oldTaskDueDate =
+						this.plugin.taskParser.getDueDateFromLineText(line) || "";
+					const newTaskDueDate =
+						this.plugin.taskParser.ISOStringToLocalDateString(
+							evt.extraData?.dueDate,
+						) || "";
+
+					//console.log(`${evt.objectId} duedate is updated`)
+					console.log(oldTaskDueDate);
+					console.log(newTaskDueDate);
+					if (oldTaskDueDate === "") {
+						//console.log(this.plugin.taskParser.insertDueDateBeforeTodoist(line,newTaskDueDate))
+						lines[i] =
+							this.plugin.taskParser.insertDueDateBeforeTodoist(
+								line,
+								newTaskDueDate,
+							);
+						modified = true;
+					} else if (newTaskDueDate === "") {
+						//remove 日期from text
+						const regexRemoveDate = /(🗓️|📅|📆|🗓)\s?\d{4}-\d{2}-\d{2}/; //匹配日期🗓️2023-03-07"
+						lines[i] = line.replace(regexRemoveDate, "");
+						modified = true;
+					} else {
+						lines[i] = line.replace(oldTaskDueDate, newTaskDueDate);
+						modified = true;
+					}
+					break;
 				}
-				break;
+			}
+
+			if (modified) {
+				const newContent = lines.join("\n");
+				await this.writeContentToFile(filepath, newContent);
 			}
 		}
 
-		if (modified) {
-			const newContent = lines.join("\n");
-			//console.log(newContent)
-			await this.app.vault.modify(file, newContent);
-		}
 	}
 
 	// sync new task note to file
-	async syncAddedTaskNoteToTheFile(evt: Object) {
-		const taskId = evt.parent_item_id;
-		const note = evt.extra_data.content;
+	async syncAddedTaskNoteToTheFile(evt: ActivityEvent) {
+		const taskId = evt.parentItemId ?? "";
+		const note: string = evt.extraData?.content;
 		const datetime = this.plugin.taskParser.ISOStringToLocalDatetimeString(
-			evt.event_date,
+			evt.eventDate,
 		);
-		// 获取任务文件路径
-		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
+
+		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
 		const filepath = currentTask.path;
 
-		// 获取文件对象并更新内容
-		const file = this.app.vault.getAbstractFileByPath(filepath);
-		const content = await this.app.vault.read(file);
+		const content = await this.readContentFromFilePath(filepath);
 
-		const lines = content.split("\n");
-		let modified = false;
+		// File exists with content
+		if (typeof content === "string") {
+			const lines = content.split("\n");
+			let modified = false;
 
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-			if (
-				line.includes(taskId) &&
-				this.plugin.taskParser.hasTodoistTag(line)
-			) {
-				const indent = "\t".repeat(
-					line.length - line.trimStart().length + 1,
-				);
-				const noteLine = `${indent}- ${datetime} ${note}`;
-				lines.splice(i + 1, 0, noteLine);
-				modified = true;
-				break;
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (
+					line.includes(taskId) &&
+					this.plugin.taskParser.hasTodoistTag(line)
+				) {
+					const indent = "\t".repeat(
+						line.length - line.trimStart().length + 1,
+					);
+					const noteLine = `${indent}- ${datetime} ${note}`;
+					lines.splice(i + 1, 0, noteLine);
+					modified = true;
+					break;
+				}
 			}
-		}
 
-		if (modified) {
-			const newContent = lines.join("\n");
-			//console.log(newContent)
-			await this.app.vault.modify(file, newContent);
+			if (modified) {
+				const newContent = lines.join("\n");
+				await this.writeContentToFile(filepath, newContent);
+			}
 		}
 	}
 
-	//避免使用该方式，通过view可以获得实时更新的value
-	async readContentFromFilePath(filepath: string) {
+	async readContentFromFilePath(filepath: string): Promise<string|boolean> {
 		try {
 			const file = this.app.vault.getAbstractFileByPath(filepath);
-			const content = await this.app.vault.read(file);
-			return content;
+			if (file !== null) {
+				return await this.app.vault.read(file as TFile);
+			}
+			return "";
 		} catch (error) {
 			console.error(`Error loading content from ${filepath}: ${error}`);
 			return false;
+		}
+	}
+
+	async writeContentToFile(filepath: string, newContent: string): Promise<void> {
+		try {
+			this.plugin.debugLog(`Writing content to ${filepath}`);
+			const file = this.app.vault.getAbstractFileByPath(filepath);
+			if (file !== null) {
+				await this.app.vault.modify(file as TFile, newContent);
+			}
+		} catch (error) {
+			throw new Error(`Error writing content to ${filepath}: ${error}`);
 		}
 	}
 

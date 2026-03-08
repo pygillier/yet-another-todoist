@@ -1,5 +1,6 @@
-import { App } from "obsidian";
+import {App} from "obsidian";
 import Obsidianist from "../main";
+import {ActivityEvent} from "@doist/todoist-api-typescript";
 
 type Event = {
 	id: string;
@@ -13,10 +14,7 @@ type Event = {
 	extra_data: Record<string, any>;
 };
 
-type FilterOptions = {
-	event_type?: string;
-	object_type?: string;
-};
+
 
 export class TodoistSyncAPI {
 	app: App;
@@ -143,64 +141,16 @@ export class TodoistSyncAPI {
 		}
 	}
 
-	//get activity logs
-	//result  {count:number,events:[]}
-	async getAllActivityEvents() {
-		const accessToken = this.plugin.settings.todoistAPIToken;
-		const headers = new Headers({
-			Authorization: `Bearer ${accessToken}`,
-		});
-
+	async getNonObsidianAllActivityEvents(): Promise<ActivityEvent[]> {
 		try {
-			const response = await fetch(
-				"https://api.todoist.com/sync/v9/activity/get",
-				{
-					method: "POST",
-					headers,
-					body: JSON.stringify({}),
-				},
+			const activities: ActivityEvent[] = await this.plugin.todoistAPI.getActivities();
+			return activities.filter(
+				(event: ActivityEvent) => !event.extraData?.client?.includes("obsidian"),
 			);
-
-			if (!response.ok) {
-				throw new Error(
-					`API returned error status: ${response.status}`,
-				);
-			}
-
-			const data = await response.json();
-
-			return data;
-		} catch (error) {
-			throw error;
-		}
-	}
-
-	async getNonObsidianAllActivityEvents() {
-		try {
-			const allActivity = await this.getAllActivityEvents();
-			//console.log(allActivity)
-			const allActivityEvents = allActivity.events;
-			//client中不包含obsidian 的activity
-			const filteredArray = allActivityEvents.filter(
-				(obj) => !obj.extra_data.client?.includes("obsidian"),
-			);
-			//console.log(filteredArray)
-			return filteredArray;
 		} catch (err) {
 			console.error("An error occurred:", err);
 		}
-	}
-
-	filterActivityEvents(events: Event[], options: FilterOptions): Event[] {
-		return events.filter(
-			(event) =>
-				(options.event_type
-					? event.event_type === options.event_type
-					: true) &&
-				(options.object_type
-					? event.object_type === options.object_type
-					: true),
-		);
+		return [];
 	}
 
 	//get completed items activity
@@ -327,9 +277,7 @@ export class TodoistSyncAPI {
 				);
 			}
 
-			const data = await response.json();
-			//console.log(data)
-			return data;
+			return await response.json();
 		} catch (error) {
 			console.error(error);
 			throw new Error(

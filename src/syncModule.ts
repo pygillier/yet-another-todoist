@@ -1,5 +1,7 @@
 import Obsidianist from "../main";
-import { App, Editor, MarkdownView, Notice } from "obsidian";
+import {App, Editor, MarkdownView, Notice} from "obsidian";
+import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
+import {filterActivityEvents} from "./utils";
 
 type FrontMatter = {
 	todoistTasks: string[];
@@ -648,7 +650,7 @@ export class TodoistSync {
 	async closeTask(taskId: string): Promise<void> {
 		try {
 			await this.plugin.todoistAPI.closeTask(taskId);
-			await this.plugin.fileOperation.completeTaskInTheFile(taskId);
+			await this.plugin.fileOperation.completeTaskInFile(taskId);
 			this.plugin.cacheOperation.closeTaskToCacheByID(taskId);
 			this.plugin.saveSettings();
 			new Notice(`Task "${taskId}" closed.`);
@@ -662,7 +664,7 @@ export class TodoistSync {
 	async reopenTask(taskId: string): Promise<void> {
 		try {
 			await this.plugin.todoistAPI.openTask(taskId);
-			await this.plugin.fileOperation.uncompleteTaskInTheFile(taskId);
+			await this.plugin.fileOperation.uncompleteTaskInFile(taskId);
 			this.plugin.cacheOperation.reopenTaskToCacheByID(taskId);
 			this.plugin.saveSettings();
 			new Notice(`Task "${taskId}" reopened.`);
@@ -711,110 +713,84 @@ export class TodoistSync {
 		return deletedTaskIds;
 	}
 
-	// 同步已完成的任务状态到 Obsidian file
-	async syncCompletedTaskStatusToObsidian(unSynchronizedEvents) {
-		// 获取未同步的事件
-		//console.log(unSynchronizedEvents)
+	/**
+	 * Sync missing completed items to Obsidian
+	 *
+	 * @param events
+	 */
+	async syncCompletedItemsToObsidian(events: ActivityEvent[]) {
 		try {
-			// 处理未同步的事件并等待所有处理完成
 			const processedEvents = [];
-			for (const e of unSynchronizedEvents) {
-				//如果要修改代码，让completeTaskInTheFile(e.object_id)按照顺序依次执行，可以将Promise.allSettled()方法改为使用for...of循环来处理未同步的事件。具体步骤如下：
-				//console.log(`正在 complete ${e.object_id}`)
-				await this.plugin.fileOperation.completeTaskInTheFile(
-					e.object_id,
-				);
-				await this.plugin.cacheOperation.closeTaskToCacheByID(
-					e.object_id,
-				);
-				new Notice(`Task ${e.object_id} is closed.`);
-				processedEvents.push(e);
+			for (const evt of events) {
+				await this.plugin.fileOperation.completeTaskInFile(evt.objectId);
+				this.plugin.cacheOperation.closeTaskToCacheByID(evt.objectId);
+				new Notice(`Task ${evt.objectId} is closed.`);
+				processedEvents.push(evt);
 			}
 
-			// Save events to the local database."
-			//const allEvents = [...savedEvents, ...unSynchronizedEvents]
-			await this.plugin.cacheOperation.appendEventsToCache(
-				processedEvents,
-			);
-			this.plugin.saveSettings();
+			// Save processed events to cache
+			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			await this.plugin.saveSettings();
 		} catch (error) {
-			console.error("同步任务状态时出错：", error);
+			throw new Error("Error while processing unsyncedCompletedItems：" + error);
 		}
 	}
 
-	// 同步已完成的任务状态到 Obsidian file
-	async syncUncompletedTaskStatusToObsidian(unSynchronizedEvents) {
-		//console.log(unSynchronizedEvents)
-
+	/**
+	 * Update Obsidian with uncompleted events
+	 *
+	 * @param events
+	 */
+	async syncUncompletedItemsToObsidian(events: ActivityEvent[]) {
 		try {
-			// 处理未同步的事件并等待所有处理完成
-			const processedEvents = [];
-			for (const e of unSynchronizedEvents) {
-				//如果要修改代码，让uncompleteTaskInTheFile(e.object_id)按照顺序依次执行，可以将Promise.allSettled()方法改为使用for...of循环来处理未同步的事件。具体步骤如下：
-				//console.log(`正在 uncheck task: ${e.object_id}`)
-				await this.plugin.fileOperation.uncompleteTaskInTheFile(
-					e.object_id,
-				);
-				await this.plugin.cacheOperation.reopenTaskToCacheByID(
-					e.object_id,
-				);
-				new Notice(`Task ${e.object_id} is reopend.`);
-				processedEvents.push(e);
+			const processedEvents: ActivityEvent[] = [];
+			for (const evt of events) {
+				await this.plugin.fileOperation.uncompleteTaskInFile(evt.objectId);
+				this.plugin.cacheOperation.reopenTaskToCacheByID(evt.objectId);
+				new Notice(`Task ${evt.objectId} is reopened.`);
+				processedEvents.push(evt);
 			}
 
-			// 将新事件合并到现有事件中并保存到 JSON
-			//const allEvents = [...savedEvents, ...unSynchronizedEvents]
-			await this.plugin.cacheOperation.appendEventsToCache(
-				processedEvents,
-			);
-			this.plugin.saveSettings();
+			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			await this.plugin.saveSettings();
 		} catch (error) {
-			console.error("同步任务状态时出错：", error);
+			throw new Error("Error while processing unsyncedUncompletedItems：" + error);
 		}
 	}
 
-	// 同步updated item状态到 Obsidian 中
-	async syncUpdatedTaskToObsidian(unSynchronizedEvents) {
-		//console.log(unSynchronizedEvents)
+	/**
+	 * Sync missing updated events in Obsidian
+	 * @param events
+	 */
+	async syncUpdatedItemsToObsidian(events: ActivityEvent[]) {
 		try {
-			// 处理未同步的事件并等待所有处理完成
-			const processedEvents = [];
-			for (const e of unSynchronizedEvents) {
-				//如果要修改代码，让completeTaskInTheFile(e.object_id)按照顺序依次执行，可以将Promise.allSettled()方法改为使用for...of循环来处理未同步的事件。具体步骤如下：
-				//console.log(`正在 sync ${e.object_id} 的变化到本地`)
-				console.log(e);
-				console.log(typeof e.extra_data.last_due_date === "undefined");
-				if (!(typeof e.extra_data.last_due_date === "undefined")) {
-					//console.log(`prepare update dueDate`)
-					await this.syncUpdatedTaskDueDateToObsidian(e);
+			const processedEvents: ActivityEvent[] = [];
+			for (const e of events) {
+				if (Object.hasOwn(e, "extraData") && e.extraData !== null) {
+					if (Object.hasOwn(e.extraData, "lastDueDate")) {
+						await this.syncUpdatedTaskDueDateToObsidian(e);
+					}
+
+					if (Object.hasOwn(e.extraData, "lastContent")) {
+						await this.syncUpdatedTaskContentToObsidian(e);
+					}
 				}
 
-				if (!(typeof e.extra_data.last_content === "undefined")) {
-					//console.log(`prepare update content`)
-					await this.syncUpdatedTaskContentToObsidian(e);
-				}
 
-				//await this.plugin.fileOperation.syncUpdatedTaskToTheFile(e)
-				//还要修改cache中的数据
-				//new Notice(`Task ${e.object_id} is updated.`)
 				processedEvents.push(e);
 			}
 
-			// 将新事件合并到现有事件中并保存到 JSON
-			//const allEvents = [...savedEvents, ...unSynchronizedEvents]
-			await this.plugin.cacheOperation.appendEventsToCache(
-				processedEvents,
-			);
-			this.plugin.saveSettings();
+			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			await this.plugin.saveSettings();
 		} catch (error) {
-			console.error("Error syncing updated item", error);
+			throw new Error("Error while processing unsyncedUpdatedItems：" + error);
 		}
 	}
 
-	async syncUpdatedTaskContentToObsidian(e) {
-		this.plugin.fileOperation.syncUpdatedTaskContentToTheFile(e);
-		const content = e.extra_data.content;
-		this.plugin.cacheOperation.modifyTaskToCacheByID(e.object_id, {
+	async syncUpdatedTaskContentToObsidian(e: ActivityEvent) {
+		await this.plugin.fileOperation.syncUpdatedTaskContentToTheFile(e);
+		const content: string = e.extraData?.content ?? "";
+		this.plugin.cacheOperation.modifyTaskToCacheByID(e.objectId, {
 			content,
 		});
 		new Notice(
@@ -822,147 +798,139 @@ export class TodoistSync {
 		);
 	}
 
-	async syncUpdatedTaskDueDateToObsidian(e) {
-		this.plugin.fileOperation.syncUpdatedTaskDueDateToTheFile(e);
+	async syncUpdatedTaskDueDateToObsidian(e: ActivityEvent) {
+		await this.plugin.fileOperation.syncUpdatedTaskDueDateToFile(e);
 		
-		const task = await this.plugin.todoistAPI.getTaskById(e.object_id);
+		const task: Task = await this.plugin.todoistAPI.getTaskById(e.objectId);
 		const due = task.due ?? null;
 
-		this.plugin.cacheOperation.modifyTaskToCacheByID(e.object_id, { due });
-		new Notice(
-			`The due date of Task ${e.parent_item_id} has been modified.`,
-		);
+		this.plugin.cacheOperation.modifyTaskToCacheByID(e.objectId, { due });
+		new Notice(`The due date of Task ${e.objectId} has been modified.`);
 	}
 
-	// sync added task note to obsidian
-	async syncAddedTaskNoteToObsidian(unSynchronizedEvents) {
-		// 获取未同步的事件
-		//console.log(unSynchronizedEvents)
+	/**
+	 * Sync added tasks notes to obsidian
+	 * @param events
+	 */
+	async syncAddedTaskNoteToObsidian(events: ActivityEvent[]) {
 		try {
-			// 处理未同步的事件并等待所有处理完成
 			const processedEvents = [];
-			for (const e of unSynchronizedEvents) {
-				//如果要修改代码，让completeTaskInTheFile(e.object_id)按照顺序依次执行，可以将Promise.allSettled()方法改为使用for...of循环来处理未同步的事件。具体步骤如下：
-				console.log(e);
-				//const taskid = e.parent_item_id
-				//const note = e.extra_data.content
+			for (const e of events) {
 				await this.plugin.fileOperation.syncAddedTaskNoteToTheFile(e);
-				//await this.plugin.cacheOperation.closeTaskToCacheByID(e.object_id)
-				new Notice(`Task ${e.parent_item_id} note is added.`);
+				new Notice(`Task ${e.parentItemId} note is added.`);
 				processedEvents.push(e);
 			}
-
-			// 将新事件合并到现有事件中并保存到 JSON
-
-			await this.plugin.cacheOperation.appendEventsToCache(
-				processedEvents,
-			);
-			this.plugin.saveSettings();
+			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			await this.plugin.saveSettings();
 		} catch (error) {
-			console.error("同步任务状态时出错：", error);
+			console.error("Error while syncing tasks notes to obsidian：", error);
 		}
 	}
 
-	async syncTodoistToObsidian() {
-		try {
-			const all_activity_events =
-				await this.plugin.todoistSyncAPI.getNonObsidianAllActivityEvents();
+    async syncTodoistToObsidian() {
+        try {
+            const unsyncedEvents = await this.getUnsyncedEvents();
+			console.log(`Events to synchronize: ${unsyncedEvents.length}`);
 
-			// remove synchonized events
-			const savedEvents =
-				await this.plugin.cacheOperation.loadEventsFromCache();
-			const result1 = all_activity_events.filter(
-				(objA) => !savedEvents.some((objB) => objB.id === objA.id),
-			);
+            const syncedTasks = await this.plugin.cacheOperation.loadTasksFromCache();
 
-			const savedTasks =
-				await this.plugin.cacheOperation.loadTasksFromCache();
-			// 找出 task id 存在于 Obsidian 中的 task activity
-			const result2 = result1.filter((objA) =>
-				savedTasks.some((objB) => objB.id === objA.object_id),
-			);
-			// 找出 task id 存在于 Obsidian 中的 note activity
-			const result3 = result1.filter((objA) =>
-				savedTasks.some((objB) => objB.id === objA.parent_item_id),
-			);
+            const eventsForTrackedTasks = this.filterEventsForTrackedTasks(unsyncedEvents, syncedTasks);
+            const eventsByType = this.categorizeEventsByType(eventsForTrackedTasks, unsyncedEvents, syncedTasks);
 
-			const unsynchronized_item_completed_events =
-				this.plugin.todoistSyncAPI.filterActivityEvents(result2, {
-					event_type: "completed",
-					object_type: "item",
-				});
-			const unsynchronized_item_uncompleted_events =
-				this.plugin.todoistSyncAPI.filterActivityEvents(result2, {
-					event_type: "uncompleted",
-					object_type: "item",
-				});
+            this.logEventCategories(eventsByType);
+            await this.syncEventCategoriesToObsidian(eventsByType);
+            await this.handleProjectEvents(eventsByType.projectEvents);
+            await this.finalizeSync();
+        } catch (err) {
+            console.error("An error occurred while synchronizing:", err);
+        }
+    }
 
-			//Items updated (only changes to content, description, due_date and responsible_uid)
-			const unsynchronized_item_updated_events =
-				this.plugin.todoistSyncAPI.filterActivityEvents(result2, {
-					event_type: "updated",
-					object_type: "item",
-				});
+    private async getUnsyncedEvents(): Promise<ActivityEvent[]> {
+        const allEvents = await this.plugin.todoistSyncAPI.getNonObsidianAllActivityEvents();
+        const syncedEvents = await this.plugin.cacheOperation.loadEventsFromCache();
 
-			const unsynchronized_notes_added_events =
-				this.plugin.todoistSyncAPI.filterActivityEvents(result3, {
-					event_type: "added",
-					object_type: "note",
-				});
-			const unsynchronized_project_events =
-				this.plugin.todoistSyncAPI.filterActivityEvents(result1, {
-					object_type: "project",
-				});
-			console.log(unsynchronized_item_completed_events);
-			console.log(unsynchronized_item_uncompleted_events);
-			console.log(unsynchronized_item_updated_events);
-			console.log(unsynchronized_project_events);
-			console.log(unsynchronized_notes_added_events);
+		return allEvents.filter((event: ActivityEvent): boolean =>
+			!syncedEvents.some((syncedEvent) => syncedEvent.id === event.id)
+		);
+    }
 
-			await this.syncCompletedTaskStatusToObsidian(
-				unsynchronized_item_completed_events,
-			);
-			await this.syncUncompletedTaskStatusToObsidian(
-				unsynchronized_item_uncompleted_events,
-			);
-			await this.syncUpdatedTaskToObsidian(
-				unsynchronized_item_updated_events,
-			);
-			await this.syncAddedTaskNoteToObsidian(
-				unsynchronized_notes_added_events,
-			);
-			if (unsynchronized_project_events.length) {
-				console.log("New project event");
-				await this.plugin.cacheOperation.saveProjectsToCache();
-				await this.plugin.cacheOperation.appendEventsToCache(
-					unsynchronized_project_events,
-				);
-			}
-		} catch (err) {
-			console.error("An error occurred while synchronizing:", err);
-		}
-	}
+    private filterEventsForTrackedTasks(unsyncedEvents: ActivityEvent[], syncedTasks: any[]): ActivityEvent[] {
+		return unsyncedEvents.filter((event: ActivityEvent): boolean =>
+			syncedTasks.some((task) => task.id === event.objectId)
+		);
+    }
 
-	async backupTodoistAllResources() {
-		try {
-			const resources =
-				await this.plugin.todoistSyncAPI.getAllResources();
+    private categorizeEventsByType(eventsForTrackedTasks: ActivityEvent[], unsyncedEvents: ActivityEvent[], syncedTasks: any[]) {
+        const eventsForUntrackedNotes = unsyncedEvents.filter((event: ActivityEvent): boolean =>
+            !syncedTasks.some((task) => task.id === event.parentItemId)
+        );
 
-			const now: Date = new Date();
-			const timeString: string = `${now.getFullYear()}${now.getMonth() + 1}${now.getDate()}${now.getHours()}${now.getMinutes()}${now.getSeconds()}`;
+        return {
+            completedItems: filterActivityEvents(eventsForTrackedTasks, {eventType: "completed", objectType: "task"}),
+            uncompletedItems: filterActivityEvents(eventsForTrackedTasks, {
+                eventType: "uncompleted",
+                objectType: "task"
+            }),
+            updatedItems: filterActivityEvents(eventsForTrackedTasks, {eventType: "updated", objectType: "task"}),
+            addedNotes: filterActivityEvents(eventsForUntrackedNotes, {eventType: "added", objectType: "note"}),
+            projectEvents: filterActivityEvents(unsyncedEvents, {objectType: "project"})
+        };
+    }
 
-			const name = "todoist-backup-" + timeString + ".json";
+    private logEventCategories(eventsByType: ReturnType<typeof this.categorizeEventsByType>) {
+        if (eventsByType.projectEvents.length > 0) console.log("unsyncedProjectEvents", eventsByType.projectEvents);
+        if (eventsByType.completedItems.length > 0) console.log("unsyncedItemCompletedEvents", eventsByType.completedItems);
+		if (eventsByType.uncompletedItems.length > 0) console.log("unsyncedItemUncompletedEvents", eventsByType.uncompletedItems);
+		if (eventsByType.updatedItems.length > 0) console.log("unsyncedItemUpdatedEvents", eventsByType.updatedItems);
+		if (eventsByType.addedNotes.length > 0) console.log("unsyncedNotesAddedEvents", eventsByType.addedNotes);
+    }
 
-			this.app.vault.create(name, JSON.stringify(resources));
-			//console.log(`todoist 备份成功`)
-			new Notice(`Todoist backup data is saved in the path ${name}`);
-		} catch (error) {
-			console.error(
-				"An error occurred while creating Todoist backup:",
-				error,
-			);
-		}
-	}
+    private async syncEventCategoriesToObsidian(eventsByType: ReturnType<typeof this.categorizeEventsByType>) {
+        await this.syncCompletedItemsToObsidian(eventsByType.completedItems);
+        await this.syncUncompletedItemsToObsidian(eventsByType.uncompletedItems);
+        await this.syncUpdatedItemsToObsidian(eventsByType.updatedItems);
+        await this.syncAddedTaskNoteToObsidian(eventsByType.addedNotes);
+    }
+
+    private async handleProjectEvents(projectEvents: ActivityEvent[]) {
+        if (projectEvents.length > 0) {
+            console.log("New project event");
+            await this.plugin.cacheOperation.saveProjectsToCache();
+            this.plugin.cacheOperation.appendEventsToCache(projectEvents);
+        }
+    }
+
+    private async finalizeSync() {
+        this.plugin.cacheOperation.updateLastSyncTime(new Date());
+        await this.plugin.saveSettings();
+    }
+
+    async backupTodoistAllResources() {
+        try {
+            const resources = await this.plugin.todoistAPI.getAllResources();
+            const filename = this.generateBackupFilename();
+
+            await this.app.vault.create(filename, JSON.stringify(resources, null, 2));
+
+            new Notice(`Todoist backup saved: ${filename}`);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("Failed to create Todoist backup:", message);
+            new Notice(`Backup failed: ${message}`);
+        }
+    }
+
+    private generateBackupFilename(): string {
+        const now = new Date();
+        const timestamp = now
+            .toISOString()
+            .replace(/[-:]/g, '')
+            .replace(/\.\d{3}Z$/, '')
+            .replace('T', '-');
+
+        return `todoist-backup-${timestamp}.json`;
+    }
 
 	//After renaming the file, check all tasks in the file and update all links.
 	async updateTaskDescription(filepath: string) {

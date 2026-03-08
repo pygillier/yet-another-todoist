@@ -8,9 +8,7 @@ interface MyProject {
 
 export interface ObsidianistSettings {
 	initialized: boolean;
-	//mySetting: string;
-	//todoistTasksFilePath: string;
-	todoistAPIToken: string; // replace with correct type
+	todoistAPIToken: string;
 	apiInitialized: boolean;
 	defaultProjectName: string;
 	defaultProjectId: string;
@@ -21,6 +19,7 @@ export interface ObsidianistSettings {
 	statistics: any;
 	debugMode: boolean;
 	useAppURI: boolean;
+	lastSyncTime: number;
 }
 
 export const DEFAULT_SETTINGS: ObsidianistSettings = {
@@ -34,8 +33,7 @@ export const DEFAULT_SETTINGS: ObsidianistSettings = {
 	statistics: {},
 	debugMode: false,
 	useAppURI: true,
-	//mySetting: 'default',
-	//todoistTasksFilePath: 'todoistTasks.json'
+	lastSyncTime: new Date(new Date().setDate(new Date().getDate() - 7)).getTime()
 };
 
 export class ObsidianistSettingTab extends PluginSettingTab {
