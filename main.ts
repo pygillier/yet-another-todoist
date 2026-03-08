@@ -140,7 +140,7 @@ export default class Obsidianist extends Plugin {
 							view,
 						);
 						
-						this.saveSettings();
+ 					await this.saveSettings();
 					} catch (error) {
 						console.error(
 							`An error occurred while check new task in line: ${error.message}`,
@@ -191,7 +191,7 @@ export default class Obsidianist extends Plugin {
 						error,
 					);
 				}
-				this.syncLock = false;
+				this.releaseSyncLock();
 			}),
 		);
 
@@ -220,12 +220,12 @@ export default class Obsidianist extends Plugin {
 					if (!(await this.checkAndHandleSyncLock())) return;
 
 					await this.todoistSync.fullTextNewTaskCheck(filepath);
-					this.syncLock = false;
+					this.releaseSyncLock();
 				} catch (error) {
 					console.error(
 						`An error occurred while modifying the file: ${error.message}`,
 					);
-					this.syncLock = false;
+					this.releaseSyncLock();
 					// You can add further error handling logic here. For example, you may want to
 					// revert certain operations, or alert the user about the error.
 				}
@@ -404,12 +404,12 @@ export default class Obsidianist extends Plugin {
 						lastLine as number,
 						fileContent,
 					);
-					this.syncLock = false;
+					this.releaseSyncLock();
 				} catch (error) {
 					console.error(
 						`An error occurred while check modified task in line text: ${error}`,
 					);
-					this.syncLock = false;
+					this.releaseSyncLock();
 				}
 			}
 		}
@@ -501,7 +501,7 @@ export default class Obsidianist extends Plugin {
 		} catch (error) {
 			console.error("An error occurred:", error);
 			new Notice("An error occurred:", error);
-			this.syncLock = false;
+			this.releaseSyncLock();
 		} finally {
 			console.log(
 				"Todoist scheduled synchronization task completed at",

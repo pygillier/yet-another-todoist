@@ -526,7 +526,7 @@ export class TodoistSync {
 					);
 					if (lineTask.isCompleted === true) {
 						console.log(`task completed`);
-						this.plugin.todoistAPI.closeTask(
+						await this.plugin.todoistAPI.closeTask(
 							lineTask.todoistId.toString(),
 						);
 						this.plugin.cacheOperation.closeTaskToCacheByID(
@@ -534,7 +534,7 @@ export class TodoistSync {
 						);
 					} else {
 						console.log(`task umcompleted`);
-						this.plugin.todoistAPI.openTask(
+						await this.plugin.todoistAPI.openTask(
 							lineTask.todoistId.toString(),
 						);
 						this.plugin.cacheOperation.reopenTaskToCacheByID(
@@ -794,7 +794,7 @@ export class TodoistSync {
 			content,
 		});
 		new Notice(
-			`The content of Task ${e.parent_item_id} has been modified.`,
+			`The content of Task ${e.objectId} has been modified.`,
 		);
 	}
 
@@ -944,14 +944,14 @@ export class TodoistSync {
 		let updatedContent = {};
 		updatedContent.description = description;
 		try {
-			metadata.todoistTasks.forEach(async (taskId: string) => {
+			for (const taskId of metadata.todoistTasks as string[]) {
 				const updatedTask = await this.plugin.todoistAPI.updateTask(
 					taskId,
 					updatedContent,
 				);
 				updatedTask.path = filepath;
 				this.plugin.cacheOperation.updateTaskToCacheByID(updatedTask);
-			});
+			}
 		} catch (error) {
 			console.error("An error occurred in updateTaskDescription:", error);
 		}

@@ -103,7 +103,7 @@ export class TodoistAPI {
 		try {
 			if (task.dueDate) {
 				// @ts-ignore
-				task.dueDatetime = localDateStringToUTCDatetimeString(task.dueDatetime);
+				task.dueDatetime = localDateStringToUTCDatetimeString(task.dueDate);
 				task.dueDate = null;
 			}
 

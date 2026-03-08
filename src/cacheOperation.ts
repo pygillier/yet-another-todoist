@@ -78,6 +78,8 @@ export class CacheOperation {
 		newMetadata.todoistTasks = newTodoistTasks;
 		newMetadata.todoistCount = newTodoistCount;
 		console.log(`new metadata ${newMetadata}`);
+		await this.updateFileMetadata(filepath, newMetadata);
+		await this.plugin.saveSettings();
 	}
 
 	//delete filepath from filemetadata

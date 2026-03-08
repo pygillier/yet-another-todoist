@@ -2,16 +2,16 @@
 
 ## Critical / Bugs
 
-- [ ] **[BUG] `saveSettings()` not awaited before `releaseSyncLock()`** — `main.ts:143,150`. Lock is released before settings are persisted, creating a race window.
-- [ ] **[BUG] Sync lock bypassed via direct assignment** — `main.ts:194,223,228`. `this.syncLock = false` is set directly instead of calling `releaseSyncLock()`, breaking encapsulation.
-- [ ] **[BUG] `closeTask` / `openTask` not awaited before cache update** — `syncModule.ts:529,537`. Cache is updated before the API call resolves, leaving state inconsistent on failure.
-- [ ] **[BUG] `forEach` with async callbacks in metadata update** — `syncModule.ts:947`. `forEach` does not await async operations; switch to `for...of` or `Promise.all`.
-- [ ] **[BUG] `deleteTaskIdFromMetadata` never saves the new metadata** — `cacheOperation.ts:67-81`. Computes a new metadata object but never writes it back; the deletion has no effect.
-- [ ] **[BUG] Parent task accessed without null check** — `taskParser.ts:150-151`. `loadTaskFromCacheID()` can return `undefined`; `parentTask.projectId` will throw.
-- [ ] **[BUG] Wrong field passed to `localDateStringToUTCDatetimeString`** — `todoistAPI.ts:106`. `task.dueDatetime` is passed instead of `task.dueDate`.
-- [ ] **[BUG] `todoistId.toString()` called without null guard** — `syncModule.ts:387`. `todoistId` can be null at that point.
-- [ ] **[BUG] `event.parent_item_id` used instead of `event.parentItemId`** — `syncModule.ts:797`. Wrong property name (snake_case vs camelCase from SDK).
-- [ ] **[BUG] Duplicate unreachable `return` statement** — `taskParser.ts:364`. Second `return localDateString` is dead and signals a logic error.
+- [x] **[BUG] `saveSettings()` not awaited before `releaseSyncLock()`** — `main.ts:143,150`. Lock is released before settings are persisted, creating a race window.
+- [x] **[BUG] Sync lock bypassed via direct assignment** — `main.ts:194,223,228`. `this.syncLock = false` is set directly instead of calling `releaseSyncLock()`, breaking encapsulation.
+- [x] **[BUG] `closeTask` / `openTask` not awaited before cache update** — `syncModule.ts:529,537`. Cache is updated before the API call resolves, leaving state inconsistent on failure.
+- [x] **[BUG] `forEach` with async callbacks in metadata update** — `syncModule.ts:947`. `forEach` does not await async operations; switch to `for...of` or `Promise.all`.
+- [x] **[BUG] `deleteTaskIdFromMetadata` never saves the new metadata** — `cacheOperation.ts:67-81`. Computes a new metadata object but never writes it back; the deletion has no effect.
+- [x] **[BUG] Parent task accessed without null check** — `taskParser.ts:150-151`. `loadTaskFromCacheID()` can return `undefined`; `parentTask.projectId` will throw.
+- [x] **[BUG] Wrong field passed to `localDateStringToUTCDatetimeString`** — `todoistAPI.ts:106`. `task.dueDatetime` is passed instead of `task.dueDate`.
+- [x] **[BUG] `todoistId.toString()` called without null guard** — `syncModule.ts:387`. `todoistId` can be null at that point.
+- [x] **[BUG] `event.parent_item_id` used instead of `event.parentItemId`** — `syncModule.ts:797`. Wrong property name (snake_case vs camelCase from SDK).
+- [x] **[BUG] Duplicate unreachable `return` statement** — `taskParser.ts:364`. Second `return localDateString` is dead and signals a logic error.
 
 ---
 

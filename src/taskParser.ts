@@ -147,8 +147,10 @@ export class TaskParser {
 		}
 		if (task.hasParent) {
 			// Remap task project to parent one.
-			const parentTask = this.plugin.cacheOperation?.loadTaskFromCacheID(task.parentId,);
-			task.projectId = parentTask.projectId;
+			const parentTask = this.plugin.cacheOperation?.loadTaskFromCacheID(task.parentId);
+			if (parentTask) {
+				task.projectId = parentTask.projectId;
+			}
 
 		} else {
 			// Check if any of the tags in the task content matches a project in the cache, if so, assign the project id to the task.
@@ -360,7 +362,6 @@ export class TaskParser {
 			let month = (dateObj.getMonth() + 1).toString().padStart(2, "0");
 			let date = dateObj.getDate().toString().padStart(2, "0");
 			let localDateString = `${year}-${month}-${date}`;
-			return localDateString;
 			return localDateString;
 		} catch (error) {
 			console.error(
