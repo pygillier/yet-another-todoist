@@ -18,7 +18,7 @@ export class FileOperation {
 	 */
 	async completeTaskInFile(taskId: string) {
 
-		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
+		const currentTask = await this.plugin.cacheOperation.loadTaskByID(taskId);
 
 		const content = await this.readContentFromFilePath(currentTask.path)
 
@@ -49,7 +49,7 @@ export class FileOperation {
 	async uncompleteTaskInFile(taskId: string) {
 		// 获取任务文件路径
 		const currentTask =
-			await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
+			await this.plugin.cacheOperation.loadTaskByID(taskId);
 		const filepath = currentTask.path;
 
 		const content = await this.readContentFromFilePath(filepath);
@@ -150,7 +150,7 @@ export class FileOperation {
 				const taskID =
 					this.plugin.taskParser.extractTodoistIdFromText(line);
 				const taskObject =
-					this.plugin.cacheOperation.loadTaskFromCacheID(taskID);
+					this.plugin.cacheOperation.loadTaskByID(taskID);
 				const todoistLink = taskObject.url;
 				const link = `[link](${todoistLink})`;
 				const newLine = this.plugin.taskParser.addTodoistLink(
@@ -227,7 +227,7 @@ export class FileOperation {
 	// sync updated task content  to file
 	async syncUpdatedTaskContentToTheFile(evt: ActivityEvent) {
 
-		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(evt.objectId);
+		const currentTask = await this.plugin.cacheOperation.loadTaskByID(evt.objectId);
 		const filepath = currentTask.path;
 
 		const content = await this.readContentFromFilePath(filepath);
@@ -264,7 +264,7 @@ export class FileOperation {
 	 */
 	async syncUpdatedTaskDueDateToFile(evt: ActivityEvent) {
 
-		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(evt.objectId);
+		const currentTask = await this.plugin.cacheOperation.loadTaskByID(evt.objectId);
 		const filepath: string = currentTask.path;
 
 		const content = await this.readContentFromFilePath(filepath);
@@ -327,7 +327,7 @@ export class FileOperation {
 			evt.eventDate,
 		);
 
-		const currentTask = await this.plugin.cacheOperation.loadTaskFromCacheID(taskId);
+		const currentTask = await this.plugin.cacheOperation.loadTaskByID(taskId);
 		const filepath = currentTask.path;
 
 		const content = await this.readContentFromFilePath(filepath);

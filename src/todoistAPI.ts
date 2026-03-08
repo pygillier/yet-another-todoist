@@ -5,11 +5,11 @@ import {
 	AddTaskArgs,
 	UpdateTaskArgs,
 	TodoistRequestError,
-	SyncResponse
+	SyncResponse, PersonalProject, WorkspaceProject
 } from "@doist/todoist-api-typescript";
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
-import TaskObject from "./interfaces";
+import TaskObject, {Project} from "./interfaces";
 import {localDateStringToUTCDatetimeString} from "./utils";
 
 export class TodoistAPI {
@@ -30,14 +30,14 @@ export class TodoistAPI {
 		return new DoistApi(token);
 	}
 
-	async getAllProjects() {
+	async getAllProjects(): Promise<Project[]> {
 		/**
 		 * Fetch all projects for current API key
 		 * @todo Define correct return type hint (Promise of PersonalProject/WorkspaceProject array or boolean)
 		 */
 		try {
 			// @ts-ignore
-			let allProjects = [];
+			let allProjects: Project[] = [];
 			let cursor = null;
 
 			do {
@@ -52,10 +52,8 @@ export class TodoistAPI {
 
 			return allProjects;
 		} catch (error) {
-			console.error("Error while fetching projects:" + error);
 			new Notice("Unable to fetch all projects, check API key");
-
-			return false;
+			throw new Error("Error while fetching projects:" + error);
 		}
 	}
 

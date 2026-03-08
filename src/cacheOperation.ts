@@ -1,20 +1,24 @@
-import { App, Notice } from "obsidian";
+import {App, TAbstractFile} from "obsidian";
 import Obsidianist from "../main";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
-import {Runtime} from "node:inspector";
-import Timestamp = module
+import {Project} from "./interfaces";
 
 interface Due {
 	date?: string;
 	[key: string]: any; // allow for additional properties
 }
 
+interface FileMetadata {
+	todoistTasks: string[];
+	todoistCount: number;
+	defaultProjectId?: string;
+}
+
 export class CacheOperation {
 	app: App;
 	plugin: Obsidianist;
 
-	constructor(app: App, plugin: Obsidianist) {
-		//super(app,settings);
+	constructor({ app, plugin }: { app: App; plugin: Obsidianist }) {
 		this.app = app;
 		this.plugin = plugin;
 	}
@@ -27,11 +31,11 @@ export class CacheOperation {
 		this.plugin.settings.lastSyncTime = lastSyncTime.getTime();
 	}
 
-	async getFileMetadata(filepath: string) {
-		return this.plugin.settings.fileMetadata[filepath] ?? null;
+	async getFileMetadata(filepath: string): Promise<FileMetadata> {
+		return this.plugin.settings.fileMetadata[filepath] ?? {} as FileMetadata;
 	}
 
-	async getFileMetadatas() {
+	async getAllFileMetadata() {
 		return this.plugin.settings.fileMetadata ?? null;
 	}
 
@@ -48,147 +52,118 @@ export class CacheOperation {
 		this.plugin.settings.fileMetadata = metadatas;
 	}
 
-	async updateFileMetadata(filepath: string, newMetadata) {
-		const metadatas = this.plugin.settings.fileMetadata;
-
-		// 如果元数据对象不存在，则创建一个新的对象并添加到metadatas中
-		if (!metadatas[filepath]) {
-			metadatas[filepath] = {};
-		}
-
-		// 更新元数据对象中的属性值
-		metadatas[filepath].todoistTasks = newMetadata.todoistTasks;
-		metadatas[filepath].todoistCount = newMetadata.todoistCount;
-
-		// 将更新后的metadatas对象保存回设置对象中
-		this.plugin.settings.fileMetadata = metadatas;
+	async updateFileMetadata(filepath: string, newMetadata: FileMetadata) {
+		this.plugin.settings.fileMetadata[filepath] = newMetadata;
 	}
 
-	async deleteTaskIdFromMetadata(filepath: string, taskId: string) {
-		console.log(filepath);
-		const metadata = await this.getFileMetadata(filepath);
-		console.log(metadata);
+	async deleteTaskFromFileMetadata(filepath: string, taskId: string) {
+		const metadata: FileMetadata = await this.getFileMetadata(filepath);
+
 		const newTodoistTasks = metadata.todoistTasks.filter(
 			function (element) {
 				return element !== taskId;
 			},
 		);
-		const newTodoistCount = metadata.todoistCount - 1;
-		let newMetadata = {};
-		newMetadata.todoistTasks = newTodoistTasks;
-		newMetadata.todoistCount = newTodoistCount;
-		console.log(`new metadata ${newMetadata}`);
-		await this.updateFileMetadata(filepath, newMetadata);
+
+		const updatedMetadata: FileMetadata = {
+			todoistTasks: newTodoistTasks,
+			todoistCount: newTodoistTasks.length
+		};
+
+		await this.updateFileMetadata(filepath, updatedMetadata);
 		await this.plugin.saveSettings();
 	}
 
-	//delete filepath from filemetadata
-	async deleteFilepathFromMetadata(filepath: string) {
+	/**
+	 * Delete a filepath from file metadata.
+	 * @param filepath
+	 */
+	async deleteEntryFromFileMetadata(filepath: string) {
 		Reflect.deleteProperty(this.plugin.settings.fileMetadata, filepath);
-		this.plugin.saveSettings();
+		await this.plugin.saveSettings();
 		console.log(`${filepath} is deleted from file metadatas.`);
 	}
 
-	//Check errors in filemata where the filepath is incorrect.
+	/**
+	 * Checks for errors in the file metadata cache and fix them if necessary.
+	 */
 	async checkFileMetadata() {
-		const metadatas = await this.getFileMetadatas();
-		for (const key in metadatas) {
-			let filepath = key;
-			const value = metadatas[key];
-			let file = this.app.vault.getAbstractFileByPath(key);
-			if (
-				!file &&
-				(value.todoistTasks?.length === 0 || !value.todoistTasks)
-			) {
-				console.log(`${key} is not existed and metadata is empty.`);
-				await this.deleteFilepathFromMetadata(key);
-				continue;
+		const allFileMetadata = await this.getAllFileMetadata();
+
+		for (const entry of allFileMetadata) {
+			const key: string = allFileMetadata.indexOf(entry);
+			const file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(key);
+
+			if (file === null) {
+				// No metadata for this file, but the file exists. Clean up the metadata.
+				if (entry.todoistTasks.length === 0) {
+					console.log(`${key} does not exist and metadata is empty. Deleting from metadata cache.`);
+					await this.deleteEntryFromFileMetadata(key);
+				} else {
+					// Tasks presents in cache but not in file, try to find the file for the first matching task.
+					for (const task in entry.todoistTasks) {
+						const searchResult = await this.plugin.fileOperation.searchFilepathsByTaskidInVault(
+							task
+						)
+						if (searchResult) {
+							console.log(`New file found for task ${task}: ${searchResult}`);
+							await this.updateRenamedFilePath(key, searchResult);
+							await this.plugin.saveSettings();
+							break;
+						}
+					}
+				}
 			}
-			if (value.todoistTasks?.length === 0 || !value.todoistTasks) {
-				//todo
-				//delelte empty metadata
-				continue;
-			}
-			//check if file exist
-
-			if (!file) {
-				//search new filepath
-				console.log(`file ${filepath} is not exist`);
-				const todoistId1 = value.todoistTasks[0];
-				console.log(todoistId1);
-				const searchResult =
-					await this.plugin.fileOperation.searchFilepathsByTaskidInVault(
-						todoistId1,
-					);
-				console.log(`new file path is`);
-				console.log(searchResult);
-
-				//update metadata
-				await this.updateRenamedFilePath(filepath, searchResult);
-				this.plugin.saveSettings();
-			}
-
-			//const fileContent = await this.app.vault.read(file)
-			//check if file include all tasks
-
-			/*
-            value.todoistTasks.forEach(async(taskId) => {
-                const taskObject = await this.plugin.cacheOperation.loadTaskFromCacheyID(taskId)
-
-
-            });
-            */
 		}
 	}
 
-	getDefaultProjectNameForFilepath(filepath: string) {
-		const metadatas = this.plugin.settings.fileMetadata;
-		if (
-			!metadatas[filepath] ||
-			metadatas[filepath].defaultProjectId === undefined
-		) {
-			return this.plugin.settings.defaultProjectName;
+	/**
+	 * Get the project for a given file.
+	 *
+	 * @param filepath - The file path.
+	 * @returns The project name and ID.
+	 */
+	getProjectForFile(filepath: string) : {projectName: string, projectId: string} {
+		const metadata = this.plugin.settings.fileMetadata;
+		if (metadata[filepath] && metadata[filepath].defaultProjectId) {
+			// Specific project for a given file
+			const defaultProjectId = metadata[filepath].defaultProjectId;
+			return {
+				projectName: this.getProjectNameByIdFromCache(defaultProjectId),
+				projectId: defaultProjectId,
+			};
 		} else {
-			const defaultProjectId = metadatas[filepath].defaultProjectId;
-			const defaultProjectName =
-				this.getProjectNameByIdFromCache(defaultProjectId);
-			return defaultProjectName;
+			// Default one
+			return {
+				projectName: this.plugin.settings.defaultProjectName,
+				projectId: this.plugin.settings.defaultProjectId,
+			};
 		}
 	}
 
-	getDefaultProjectIdForFilepath(filepath: string) {
-		const metadatas = this.plugin.settings.fileMetadata;
-		if (
-			!metadatas[filepath] ||
-			metadatas[filepath].defaultProjectId === undefined
-		) {
-			return this.plugin.settings.defaultProjectId;
+	/**
+	 * Set the default project for a file
+	 * @param filepath
+	 * @param projectID
+	 */
+	setDefaultProjectForFile(filepath: string, projectID: string) {
+		if (filepath in this.plugin.settings.fileMetadata) {
+			this.plugin.settings.fileMetadata[filepath].defaultProjectId = projectID;
 		} else {
-			const defaultProjectId = metadatas[filepath].defaultProjectId;
-			return defaultProjectId;
+			this.plugin.settings.fileMetadata[filepath] = {
+				todoistCount: 0,
+				todoistTasks: [],
+				defaultProjectId: projectID,
+			};
 		}
 	}
 
-	setDefaultProjectIdForFilepath(filepath: string, defaultProjectId: string) {
-		const metadatas = this.plugin.settings.fileMetadata;
-		if (!metadatas[filepath]) {
-			metadatas[filepath] = {};
-		}
-		metadatas[filepath].defaultProjectId = defaultProjectId;
-
-		// 将更新后的metadatas对象保存回设置对象中
-		this.plugin.settings.fileMetadata = metadatas;
-	}
-
-	// 从 Cache读取所有task
-	loadTasksFromCache() {
-		try {
-			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-			return savedTasks;
-		} catch (error) {
-			console.error(`Error loading tasks from Cache: ${error}`);
-			return [];
-		}
+	/**
+	 * Load all tasks from the cache
+	 * @returns
+	 */
+	loadTasksFromCache(): Task[] {
+		return this.plugin.settings.todoistTasksData.tasks;
 	}
 
 	// 覆盖保存所有task到cache
@@ -210,11 +185,7 @@ export class CacheOperation {
 	}
 
 	loadEventsFromCache() {
-		try {
-			return this.plugin.settings.todoistTasksData.events;
-		} catch (error) {
-			console.error(`Error loading events from Cache: ${error}`);
-		}
+		return this.plugin.settings.todoistTasksData.events;
 	}
 
 	/**
@@ -229,12 +200,14 @@ export class CacheOperation {
 		this.plugin.settings.todoistTasksData.tasks.push(task);
 	}
 
-	//读取指定id的任务
-	loadTaskFromCacheID(taskId: string) {
+	/**
+	 * Load a task from Cache by ID
+	 * @param taskId
+	 */
+	loadTaskByID(taskId: string) {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-			const savedTask = savedTasks.find((t) => t.id === taskId);
-			return savedTask;
+			return savedTasks.find((t) => t.id === taskId);
 		} catch (error) {
 			console.error(`Error finding task from Cache: ${error}`);
 			return {};
@@ -353,33 +326,18 @@ export class CacheOperation {
 
 	//通过 name 查找 project id
 	getProjectIdByNameFromCache(projectName: string) {
-		try {
-			const savedProjects =
-				this.plugin.settings.todoistTasksData.projects;
-			const targetProject = savedProjects.find(
-				(obj) => obj.name === projectName,
-			);
-			const projectId = targetProject ? targetProject.id : null;
-			return projectId;
-		} catch (error) {
-			console.error(`Error finding project from Cache file: ${error}`);
-			return false;
-		}
+		const targetProject = this.plugin.settings.todoistTasksData.projects.find(
+			(obj:Project) => obj.name === projectName,
+		);
+		return targetProject ? targetProject.id : "";
 	}
 
 	getProjectNameByIdFromCache(projectId: string) {
-		try {
-			const savedProjects =
-				this.plugin.settings.todoistTasksData.projects;
-			const targetProject = savedProjects.find(
-				(obj) => obj.id === projectId,
-			);
-			const projectName = targetProject ? targetProject.name : null;
-			return projectName;
-		} catch (error) {
-			console.error(`Error finding project from Cache file: ${error}`);
-			return false;
-		}
+		const targetProject = this.plugin.settings.todoistTasksData.projects.find(
+			(obj: Project) => obj.id === projectId,
+		);
+
+		return targetProject ? targetProject.name : "";
 	}
 
 	/**
@@ -387,13 +345,7 @@ export class CacheOperation {
 	 */
 	async saveProjectsToCache() {
 		try {
-			const projects = await this.plugin.todoistAPI.getAllProjects();
-			if (!projects) {
-				return false;
-			}
-
-			this.plugin.settings.todoistTasksData.projects = projects;
-
+			this.plugin.settings.todoistTasksData.projects = await this.plugin.todoistAPI.getAllProjects();
 			return true;
 		} catch (error) {
 			console.log(`error downloading projects: ${error}`);

@@ -2,29 +2,6 @@ import { App } from "obsidian";
 import Obsidianist from "../main";
 import TaskObject from './interfaces';
 
-interface dataviewTaskObject {
-	status: string;
-	checked: boolean;
-	completed: boolean;
-	fullyCompleted: boolean;
-	text: string;
-	visual: string;
-	line: number;
-	lineCount: number;
-	path: string;
-	section: string;
-	tags: string[];
-	outlinks: string[];
-	link: string;
-	children: any[];
-	task: boolean;
-	annotated: boolean;
-	parent: number;
-	blockId: string;
-}
-
-
-
 const keywords = {
 	TODOIST_TAG: "#todoist",
 	DUE_DATE: "🗓️|📅|📆|🗓",
@@ -89,7 +66,7 @@ export class TaskParser {
 		// Clean out text
 		const cleanedText = this.removeTaskIndentation(lineText)
 
-		let task = {
+		const task = {
 			hasParent: false,
 			content: this.getTaskContentFromLineText(cleanedText),
 			dueDate: this.getDueDateFromLineText(cleanedText),
@@ -100,12 +77,11 @@ export class TaskParser {
 		} as TaskObject;
 
 		// Config
-		task.projectId = this.plugin.cacheOperation?.getDefaultProjectIdForFilepath(
-				filepath as string,
-			);
+		const project = this.plugin.cacheOperation.getProjectForFile(filepath);
+		task.projectId = project.projectId
 
 		if (filepath) {
-			let url = encodeURI(
+			const url = encodeURI(
 				`obsidian://open?vault=${this.app.vault.getName()}&file=${filepath}`,
 			);
 			task.description = `[${filepath}](${url})`;
@@ -124,7 +100,7 @@ export class TaskParser {
 				
 				const line = lines[i];
 
-				// Break if line is blank, no possible parent task above
+				// Break if the line is blank, no possible parent task above
 				if (this.isLineBlank(line)) { break;}
 
 				// Same or higher indentation, continue searching
@@ -146,8 +122,8 @@ export class TaskParser {
 			}
 		}
 		if (task.hasParent) {
-			// Remap task project to parent one.
-			const parentTask = this.plugin.cacheOperation?.loadTaskFromCacheID(task.parentId);
+			// Remap the task project to parent one.
+			const parentTask = this.plugin.cacheOperation?.loadTaskByID(task.parentId);
 			if (parentTask) {
 				task.projectId = parentTask.projectId;
 			}

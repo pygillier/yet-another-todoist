@@ -7,7 +7,6 @@ import {
 	ObsidianistSettingTab,
 } from "./src/settings";
 //todoist  api
-import { TodoistRestAPI } from "./src/todoistRestAPI";
 import { TodoistAPI } from "src/todoistAPI";
 //task parser
 import { TaskParser } from "./src/taskParser";
@@ -24,7 +23,6 @@ import { DefaultProjectModal } from "src/modal";
 
 export default class Obsidianist extends Plugin {
 	settings: ObsidianistSettings;
-	todoistRestAPI: TodoistRestAPI;
 	todoistAPI: TodoistAPI;
 	taskParser: TaskParser;
 	cacheOperation: CacheOperation;
@@ -302,7 +300,7 @@ export default class Obsidianist extends Plugin {
 	}
 
 	/**
-	 * INitialize the plugin, including:
+	 * Initialize the plugin, including:
 	 * 1. initialize todoist api module
 	 * 2. initialize data read and write module, and save projects and labels data to cache
 	 * 3. if first time to initialize, create backup of all todoist data, and initialize settings
@@ -316,7 +314,7 @@ export default class Obsidianist extends Plugin {
 		this.todoistAPI = new TodoistAPI(this.app, this);
 
 		//initialize data read and write object
-		this.cacheOperation = new CacheOperation(this.app, this);
+		this.cacheOperation = new CacheOperation({ app: this.app, plugin: this });
 		const isProjectsSaved = await this.cacheOperation.saveProjectsToCache();
 
 		if (!isProjectsSaved) {
@@ -336,13 +334,10 @@ export default class Obsidianist extends Plugin {
 	}
 
 	async initializeModuleClass() {
-		//initialize todoist restapi
-		this.todoistRestAPI = new TodoistRestAPI(this.app, this);
-
 		this.todoistAPI = new TodoistAPI(this.app, this);
 
 		//initialize data read and write object
-		this.cacheOperation = new CacheOperation(this.app, this);
+		this.cacheOperation = new CacheOperation({ app: this.app, plugin: this });
 		this.taskParser = new TaskParser(this.app, this);
 
 		//initialize file operation
@@ -436,7 +431,6 @@ export default class Obsidianist extends Plugin {
 	checkModuleClass(): boolean {
 		if (this.settings.apiInitialized) {
 			if (
-				this.todoistRestAPI === undefined ||
 				this.cacheOperation === undefined ||
 				this.fileOperation === undefined ||
 				this.todoistSync === undefined ||
@@ -466,15 +460,13 @@ export default class Obsidianist extends Plugin {
 				console.log(`file path undefined`);
 				return;
 			}
-			const defaultProjectName =
-				await this.cacheOperation.getDefaultProjectNameForFilepath(
-					filepath as string,
-				);
-			if (defaultProjectName === undefined) {
+
+			const project = this.cacheOperation.getProjectForFile(filepath as string);
+			if (project?.projectName === undefined) {
 				console.log(`projectName undefined`);
 				return;
 			}
-			this.statusBar.setText(defaultProjectName);
+			this.statusBar.setText(project?.projectName);
 		}
 	}
 

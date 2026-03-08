@@ -1,5 +1,6 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import Obsidianist from "../main";
+import { TodoistTaskData} from "./interfaces";
 
 interface MyProject {
 	id: string;
@@ -12,11 +13,11 @@ export interface ObsidianistSettings {
 	apiInitialized: boolean;
 	defaultProjectName: string;
 	defaultProjectId: string;
-	automaticSynchronizationInterval: Number;
-	todoistTasksData: any;
+	automaticSynchronizationInterval: number;
+	todoistTasksData: TodoistTaskData;
 	fileMetadata: any;
 	enableFullVaultSync: boolean;
-	statistics: any;
+	statistics: object;
 	debugMode: boolean;
 	useAppURI: boolean;
 	lastSyncTime: number;
@@ -226,7 +227,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 					await this.plugin.cacheOperation.checkFileMetadata();
 					this.plugin.saveSettings();
 					const metadatas =
-						await this.plugin.cacheOperation.getFileMetadatas();
+						await this.plugin.cacheOperation.getAllFileMetadata();
 					// check default project task amounts
 					try {
 						const projectId = this.plugin.settings.defaultProjectId;
@@ -262,7 +263,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 
 							try {
 								taskObject =
-									await this.plugin.cacheOperation.loadTaskFromCacheID(
+									await this.plugin.cacheOperation.loadTaskByID(
 										taskId,
 									);
 							} catch (error) {
@@ -287,7 +288,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 										console.log(
 											`Task ${taskId} seems to not exist.`,
 										);
-										await this.plugin.cacheOperation.deleteTaskIdFromMetadata(
+										await this.plugin.cacheOperation.deleteTaskFromFileMetadata(
 											key,
 											taskId,
 										);
@@ -318,7 +319,7 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 								let taskObject;
 								try {
 									taskObject =
-										await this.plugin.cacheOperation.loadTaskFromCacheID(
+										await this.plugin.cacheOperation.loadTaskByID(
 											taskId,
 										);
 								} catch (error) {

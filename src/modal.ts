@@ -26,16 +26,11 @@ export class DefaultProjectModal extends Modal {
 			return;
 		}
 
-		this.defaultProjectId =
-			await this.plugin.cacheOperation.getDefaultProjectIdForFilepath(
-				this.filepath,
-			);
-		this.defaultProjectName =
-			await this.plugin.cacheOperation.getProjectNameByIdFromCache(
-				this.defaultProjectId,
-			);
-		console.log(this.defaultProjectId);
-		console.log(this.defaultProjectName);
+		const project = this.plugin.cacheOperation.getProjectForFile(this.filepath)
+
+		this.defaultProjectId =project.projectId;
+		this.defaultProjectName = project.projectName;
+
 		const filepath = this.filepath;
 		const myProjectsOptions: Record<string, string> =
 			this.plugin.settings.todoistTasksData?.projects?.reduce(
@@ -55,7 +50,7 @@ export class DefaultProjectModal extends Modal {
 					.addOptions(myProjectsOptions)
 					.onChange((value) => {
 						console.log(`project id  is ${value}`);
-						this.plugin.cacheOperation.setDefaultProjectIdForFilepath(
+						this.plugin.cacheOperation.setDefaultProjectForFile(
 							filepath,
 							value,
 						);

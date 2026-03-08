@@ -3,11 +3,6 @@ import {App, Editor, MarkdownView, Notice} from "obsidian";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
 import {filterActivityEvents} from "./utils";
 
-type FrontMatter = {
-	todoistTasks: string[];
-	todoistCount: number;
-};
-
 export class TodoistSync {
 	app: App;
 	plugin: Obsidianist;
@@ -74,7 +69,7 @@ export class TodoistSync {
 		}
 		this.plugin.cacheOperation.deleteTaskFromCacheByIDs(deletedTaskIds);
 		//console.log(`删除了${deletedTaskAmount} 条 task`)
-		this.plugin.saveSettings();
+		await this.plugin.saveSettings();
 		// 更新 newFrontMatter_todoistTasks 数组
 
 		// Disable automatic merging
@@ -388,7 +383,7 @@ export class TodoistSync {
 			//console.log(lineTask_todoist_id )
 			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)
 			const savedTask =
-				await this.plugin.cacheOperation.loadTaskFromCacheID(
+				await this.plugin.cacheOperation.loadTaskByID(
 					lineTask_todoist_id,
 				); //dataview中 id为数字，todoist中id为字符串，需要转换
 			if (!savedTask) {
@@ -666,7 +661,7 @@ export class TodoistSync {
 			await this.plugin.todoistAPI.openTask(taskId);
 			await this.plugin.fileOperation.uncompleteTaskInFile(taskId);
 			this.plugin.cacheOperation.reopenTaskToCacheByID(taskId);
-			this.plugin.saveSettings();
+			await this.plugin.saveSettings();
 			new Notice(`Task "${taskId}" reopened.`);
 		} catch (error) {
 			console.error("Error while reopening task:", error);
@@ -941,7 +936,9 @@ export class TodoistSync {
 		}
 		const description =
 			this.plugin.taskParser.getObsidianUrlFromFilepath(filepath);
-		let updatedContent = {};
+		const updatedContent = {
+			description: "",
+		};
 		updatedContent.description = description;
 		try {
 			for (const taskId of metadata.todoistTasks as string[]) {

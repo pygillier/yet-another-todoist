@@ -1,3 +1,7 @@
+import {ActivityEvent, PersonalProject, Task, WorkspaceProject} from "@doist/todoist-api-typescript";
+
+export type Project = PersonalProject | WorkspaceProject;
+
 export default interface TaskObject {
 	content: string;
 	description?: string;
@@ -15,4 +19,10 @@ export default interface TaskObject {
 	todoistId?: string | null;
 	parentId: string | null;
 	hasParent: boolean;
+}
+
+export interface TodoistTaskData {
+	projects: Project[];
+	tasks: Task[];
+	events: ActivityEvent[];
 }
