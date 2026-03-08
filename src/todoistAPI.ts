@@ -5,7 +5,7 @@ import {
 	AddTaskArgs,
 	UpdateTaskArgs,
 	TodoistRequestError,
-	SyncResponse, PersonalProject, WorkspaceProject
+	SyncResponse
 } from "@doist/todoist-api-typescript";
 import { App, Notice } from "obsidian";
 import Obsidianist from "../main";
@@ -25,7 +25,7 @@ export class TodoistAPI {
 	}
 
 	initializeAPI(): DoistApi {
-		// Initialize API object and return it
+		// Initialize API and return it
 		const token = this.plugin.settings.todoistAPIToken;
 		return new DoistApi(token);
 	}
@@ -36,7 +36,6 @@ export class TodoistAPI {
 		 * @todo Define correct return type hint (Promise of PersonalProject/WorkspaceProject array or boolean)
 		 */
 		try {
-			// @ts-ignore
 			let allProjects: Project[] = [];
 			let cursor = null;
 
@@ -46,7 +45,6 @@ export class TodoistAPI {
 					limit: 10,
 				});
 				cursor = projects.nextCursor;
-				// @ts-ignore
 				allProjects = [...allProjects, ...projects.results];
 			} while (cursor != null);
 
