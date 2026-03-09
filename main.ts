@@ -357,18 +357,11 @@ export default class Obsidianist extends Plugin {
 		this.debugLog(`Checking line changes...`);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (view) {
-			const cursor = view.app.workspace
-				.getActiveViewOfType(MarkdownView)
-				?.editor.getCursor();
+			const cursor = view.editor.getCursor();
 			const line = cursor?.line;
 			const fileContent = view.data;
-
-			const fileName =
-				view.app.workspace.getActiveViewOfType(MarkdownView)?.app
-					.workspace.activeEditor?.file?.name;
-			const filepath =
-				view.app.workspace.getActiveViewOfType(MarkdownView)?.app
-					.workspace.activeEditor?.file?.path;
+			const fileName = view.file?.name;
+			const filepath = view.file?.path;
 			if (
 				typeof this.lastLines === "undefined" ||
 				typeof this.lastLines.get(fileName as string) === "undefined"
@@ -453,9 +446,7 @@ export default class Obsidianist extends Plugin {
 		if (!view) {
 			this.statusBar.setText("");
 		} else {
-			const filepath =
-				this.app.workspace.getActiveViewOfType(MarkdownView)?.file
-					?.path;
+			const filepath = view.file?.path;
 			if (filepath === undefined) {
 				console.log(`file path undefined`);
 				return;

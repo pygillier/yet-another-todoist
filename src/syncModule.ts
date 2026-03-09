@@ -55,11 +55,13 @@ export class TodoistSync {
 		const frontMatter_todoistTasks = frontMatter.todoistTasks;
 		const frontMatter_todoistCount = frontMatter.todoistCount;
 
+		const presentIds = new Set(
+			Array.from(currentFileValueWithOutFrontMatter.matchAll(/\[todoist_id::\s*(\w+)\]/g))
+				.map(m => m[1])
+		);
+
 		const deleteTasksPromises = frontMatter_todoistTasks
-			.filter(
-				(taskId: string) =>
-					!currentFileValueWithOutFrontMatter.includes(taskId),
-			)
+			.filter((taskId: string) => !presentIds.has(taskId))
 			.map(async (taskId: string) => {
 				try {
 					this.todoistAPI.deleteTask(taskId);
@@ -703,10 +705,10 @@ export class TodoistSync {
             const unsyncedEvents = await this.getUnsyncedEvents();
 			console.log(`Events to synchronize: ${unsyncedEvents.length}`);
 
-            const syncedTasks = this.cacheOperation.loadTasksFromCache();
+            const syncedTaskIds = new Set(this.cacheOperation.loadTasksFromCache().map(t => t.id));
 
-            const eventsForTrackedTasks = this.filterEventsForTrackedTasks(unsyncedEvents, syncedTasks);
-            const eventsByType = this.categorizeEventsByType(eventsForTrackedTasks, unsyncedEvents, syncedTasks);
+            const eventsForTrackedTasks = this.filterEventsForTrackedTasks(unsyncedEvents, syncedTaskIds);
+            const eventsByType = this.categorizeEventsByType(eventsForTrackedTasks, unsyncedEvents, syncedTaskIds);
 
             this.logEventCategories(eventsByType);
             await this.syncEventCategoriesToObsidian(eventsByType);
@@ -719,22 +721,22 @@ export class TodoistSync {
 
     private async getUnsyncedEvents(): Promise<ActivityEvent[]> {
         const allEvents = await this.todoistAPI.getNonObsidianActivities();
-        const syncedEvents = await this.cacheOperation.loadEventsFromCache();
+        const syncedEventIds = new Set(this.cacheOperation.loadEventsFromCache().map(e => e.id));
 
 		return allEvents.filter((event: ActivityEvent): boolean =>
-			!syncedEvents.some((syncedEvent) => syncedEvent.id === event.id)
+			!syncedEventIds.has(event.id)
 		);
     }
 
-    private filterEventsForTrackedTasks(unsyncedEvents: ActivityEvent[], syncedTasks: LocalTask[]): ActivityEvent[] {
+    private filterEventsForTrackedTasks(unsyncedEvents: ActivityEvent[], syncedTaskIds: Set<string>): ActivityEvent[] {
 		return unsyncedEvents.filter((event: ActivityEvent): boolean =>
-			syncedTasks.some((task) => task.id === event.objectId)
+			syncedTaskIds.has(event.objectId)
 		);
     }
 
-    private categorizeEventsByType(eventsForTrackedTasks: ActivityEvent[], unsyncedEvents: ActivityEvent[], syncedTasks: LocalTask[]) {
+    private categorizeEventsByType(eventsForTrackedTasks: ActivityEvent[], unsyncedEvents: ActivityEvent[], syncedTaskIds: Set<string>) {
         const eventsForUntrackedNotes = unsyncedEvents.filter((event: ActivityEvent): boolean =>
-            !syncedTasks.some((task) => task.id === event.parentItemId)
+            !syncedTaskIds.has(event.parentItemId ?? "")
         );
 
         return {
