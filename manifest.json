@@ -1,7 +1,7 @@
 {
 	"id": "obsidianist",
 	"name": "Obsidianist",
-	"version": "1.0.0",
+	"version": "1.0.2",
 	"minAppVersion": "1.0.0",
 	"description": "Synchronize Obsidian tasks with Todoist.",
 	"author": "pygillier",
