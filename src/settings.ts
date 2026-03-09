@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import Obsidianist from "../main";
-import { TodoistTaskData} from "./interfaces";
+import { TodoistTaskData, FileMetadata } from "./interfaces";
 
 interface MyProject {
 	id: string;
@@ -15,9 +15,9 @@ export interface ObsidianistSettings {
 	defaultProjectId: string;
 	automaticSynchronizationInterval: number;
 	todoistTasksData: TodoistTaskData;
-	fileMetadata: any;
+	fileMetadata: Record<string, FileMetadata>;
 	enableFullVaultSync: boolean;
-	statistics: object;
+	statistics: Record<string, unknown>;
 	debugMode: boolean;
 	useAppURI: boolean;
 	lastSyncTime: number;

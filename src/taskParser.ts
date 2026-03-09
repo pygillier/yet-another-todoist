@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import Obsidianist from "../main";
-import TaskObject, {ConversionArguments} from './interfaces';
+import TaskObject, {ConversionArguments, LocalTask} from './interfaces';
 
 const keywords = {
 	TODOIST_TAG: "#todoist",
@@ -201,7 +201,7 @@ export class TaskParser {
 	}
 
 	//task content compare
-	taskContentCompare(lineTask: Object, todoistTask: Object) {
+	taskContentCompare(lineTask: TaskObject, todoistTask: LocalTask): boolean {
 		const lineTaskContent = lineTask.content;
 		//console.log(dataviewTaskContent)
 
@@ -214,7 +214,7 @@ export class TaskParser {
 	}
 
 	//tag compare
-	taskTagCompare(lineTask: Object, todoistTask: Object) {
+	taskTagCompare(lineTask: TaskObject, todoistTask: LocalTask): boolean {
 		const lineTaskTags = lineTask.labels;
 		//console.log(dataviewTaskTags)
 
@@ -231,7 +231,7 @@ export class TaskParser {
 	}
 
 	//task status compare
-	taskStatusCompare(lineTask: Object, todoistTask: Object) {
+	taskStatusCompare(lineTask: TaskObject, todoistTask: LocalTask): boolean {
 		//status 是否修改
 		const statusModified = lineTask.isCompleted === todoistTask.isCompleted;
 		//console.log(lineTask)
@@ -241,8 +241,8 @@ export class TaskParser {
 
 	//task due date compare
 	async compareTaskDueDate(
-		lineTask: object,
-		todoistTask: object,
+		lineTask: TaskObject,
+		todoistTask: LocalTask,
 	): Promise<boolean> {
 		const lineTaskDue = lineTask.dueDate;
 		const todoistTaskDue = todoistTask.due ?? "";
@@ -277,8 +277,8 @@ export class TaskParser {
 
 	//task project id compare
 	async taskProjectCompare(
-		lineTask: Object,
-		todoistTask: Object,
+		lineTask: TaskObject,
+		todoistTask: LocalTask,
 	): Promise<boolean> {
 		//project 是否修改
 		//console.log(dataviewTaskProjectId)

@@ -157,16 +157,15 @@ export class CacheOperation {
 	}
 
 	// 覆盖保存所有task到cache
-	saveTasksToCache(newTasks: LocalTask[]) {
+	saveTasksToCache(newTasks: LocalTask[]): void {
 		try {
 			this.plugin.settings.todoistTasksData.tasks = newTasks;
 		} catch (error) {
 			console.error(`Error saving tasks to Cache: ${error}`);
-			return false;
 		}
 	}
 
-	appendEventsToCache(events: ActivityEvent[]) {
+	appendEventsToCache(events: ActivityEvent[]): void {
 		this.plugin.settings.todoistTasksData.events.push(...events);
 	}
 
@@ -195,7 +194,7 @@ export class CacheOperation {
 	}
 
 	//覆盖update指定id的task
-	updateTaskToCacheByID(task: LocalTask) {
+	updateTaskToCacheByID(task: LocalTask): void {
 		try {
 			//删除就的task
 			this.deleteTaskFromCache(task.id);
@@ -203,12 +202,11 @@ export class CacheOperation {
 			this.appendTaskToCache(task);
 		} catch (error) {
 			console.error(`Error updating task to Cache: ${error}`);
-			return [];
 		}
 	}
 
 	//open a task status
-	reopenTaskToCacheByID(taskId: string) {
+	reopenTaskToCacheByID(taskId: string): void {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 
@@ -243,7 +241,7 @@ export class CacheOperation {
 	}
 
 	// 通过 ID 删除任务
-	deleteTaskFromCache(taskId: string) {
+	deleteTaskFromCache(taskId: string): void {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 			this.plugin.settings.todoistTasksData.tasks = savedTasks.filter((t) => t.id !== taskId);
@@ -253,7 +251,7 @@ export class CacheOperation {
 	}
 
 	// 通过 ID 数组 删除task
-	deleteTaskFromCacheByIDs(deletedTaskIds: string[]) {
+	deleteTaskFromCacheByIDs(deletedTaskIds: string[]): void {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
 			this.plugin.settings.todoistTasksData.tasks = savedTasks.filter(
@@ -265,14 +263,14 @@ export class CacheOperation {
 	}
 
 	//通过 name 查找 project id
-	getProjectIdByNameFromCache(projectName: string) {
+	getProjectIdByNameFromCache(projectName: string): string {
 		const targetProject = this.plugin.settings.todoistTasksData.projects.find(
 			(obj:Project) => obj.name === projectName,
 		);
 		return targetProject ? targetProject.id : "";
 	}
 
-	getProjectNameByIdFromCache(projectId: string) {
+	getProjectNameByIdFromCache(projectId: string): string {
 		const targetProject = this.plugin.settings.todoistTasksData.projects.find(
 			(obj: Project) => obj.id === projectId,
 		);

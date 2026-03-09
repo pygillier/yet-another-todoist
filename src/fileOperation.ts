@@ -361,7 +361,7 @@ export class FileOperation {
 		}
 	}
 
-	async readContentFromFilePath(filepath: string): Promise<string|boolean> {
+	async readContentFromFilePath(filepath: string): Promise<string | null> {
 		try {
 			const file = this.app.vault.getAbstractFileByPath(filepath);
 			if (file !== null) {
@@ -370,7 +370,7 @@ export class FileOperation {
 			return "";
 		} catch (error) {
 			console.error(`Error loading content from ${filepath}: ${error}`);
-			return false;
+			return null;
 		}
 	}
 

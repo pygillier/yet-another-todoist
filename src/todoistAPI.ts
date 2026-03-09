@@ -98,8 +98,8 @@ export class TodoistAPI {
 	async addTask(task: TaskObject): Promise<LocalTask> {
 		try {
 			if (task.dueDate) {
-				// @ts-ignore
-				task.dueDatetime = localDateStringToUTCDatetimeString(task.dueDate);
+				const datetime = localDateStringToUTCDatetimeString(task.dueDate);
+				if (datetime) task.dueDatetime = datetime;
 				task.dueDate = null;
 			}
 
