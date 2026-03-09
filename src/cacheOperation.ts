@@ -34,7 +34,7 @@ export class CacheOperation {
 		if (metadatas[filepath]) {
 			return;
 		} else {
-			metadatas[filepath] = {};
+			metadatas[filepath] = {} as FileMetadata;
 		}
 		metadatas[filepath].todoistTasks = [];
 		metadatas[filepath].todoistCount = 0;
@@ -80,8 +80,7 @@ export class CacheOperation {
 	async checkFileMetadata() {
 		const allFileMetadata = await this.getAllFileMetadata();
 
-		for (const entry of allFileMetadata) {
-			const key: string = allFileMetadata.indexOf(entry);
+		for (const [key, entry] of Object.entries(allFileMetadata)) {
 			const file: TAbstractFile | null = this.app.vault.getAbstractFileByPath(key);
 
 			if (file === null) {
@@ -105,6 +104,7 @@ export class CacheOperation {
 				}
 			}
 		}
+
 	}
 
 	/**
@@ -194,11 +194,15 @@ export class CacheOperation {
 	 * Load a task from Cache by ID
 	 * @param taskId
 	 */
-	loadTaskByID(taskId: string): LocalTask | null {
+	loadTaskByID(taskId: string): LocalTask {
 
-		const task =  this.plugin.settings.todoistTasksData.tasks.find((t: Task) => t.id === taskId);
+		const task = this.plugin.settings.todoistTasksData.tasks.find((t: Task) => t.id === taskId);
 
-		return task ?? null;
+		if (!task) {
+			throw new Error(`Task not found in cache: ${taskId}`);
+		}
+
+		return task;
 	}
 
 	updateTaskToCacheByID(task: LocalTask): void {
@@ -213,17 +217,6 @@ export class CacheOperation {
 		this.upsertTask(taskId, { isCompleted: true });
 	}
 
-	// 通过 ID 删除任务
-	deleteTaskFromCache(taskId: string): void {
-		try {
-			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-			this.plugin.settings.todoistTasksData.tasks = savedTasks.filter((t) => t.id !== taskId);
-		} catch (error) {
-			console.error(`Error deleting task from Cache file: ${error}`);
-		}
-	}
-
-	// 通过 ID 数组 删除task
 	deleteTaskFromCacheByIDs(deletedTaskIds: string[]): void {
 		try {
 			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
@@ -235,7 +228,6 @@ export class CacheOperation {
 		}
 	}
 
-	//通过 name 查找 project id
 	getProjectIdByNameFromCache(projectName: string): string {
 		const targetProject = this.plugin.settings.todoistTasksData.projects.find(
 			(obj:Project) => obj.name === projectName,
@@ -278,7 +270,7 @@ export class CacheOperation {
 				}
 			});
 			//console.log(newTasks)
-			await this.saveTasksToCache(newTasks);
+			this.saveTasksToCache(newTasks);
 
 			//update filepath
 			const fileMetadatas = this.plugin.settings.fileMetadata;
