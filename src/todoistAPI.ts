@@ -109,7 +109,7 @@ export class TodoistAPI {
 		}
 	}
 
-	async updateTask(taskId: string, updatedFields: Partial<TaskObject>): Promise<Task> {
+	async updateTask(taskId: string, updatedFields: Partial<TaskObject>): Promise<LocalTask> {
 		try {
 			return await this.api.updateTask(taskId, updatedFields as UpdateTaskArgs);
 		} catch (error) {

@@ -2,7 +2,6 @@ import Obsidianist from "../main";
 import {App, Editor, MarkdownView, Notice} from "obsidian";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
 import {filterActivityEvents} from "./utils";
-import {lineNumbers} from "@codemirror/view";
 import {FileMetadata, LocalTask} from "./interfaces";
 
 export class TodoistSync {
@@ -262,16 +261,15 @@ export class TodoistSync {
 							todoist_id,
 						);
 					}
-					this.plugin.saveSettings();
+					await this.plugin.saveSettings();
 
 					//todoist id 保存到 任务后面
 					const text_with_out_link = `${line} %%[todoist_id:: ${todoist_id}]%%`;
 					const link = `[link](${newTask.url})`;
-					const text = this.plugin.taskParser.addTodoistLink(
+					lines[i] = this.plugin.taskParser.addTodoistLink(
 						text_with_out_link,
 						link,
 					);
-					lines[i] = text;
 
 					newFrontMatter.todoistCount =
 						(newFrontMatter.todoistCount ?? 0) + 1;
@@ -348,7 +346,7 @@ export class TodoistSync {
 					filePath: filepath
 				});
 
-			const lineTask_todoist_id = lineTask.todoistId.toString();
+			const lineTask_todoist_id = lineTask.todoistId?.toString();
 			//console.log(lineTask_todoist_id )
 			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)
 			const savedTask =
@@ -593,7 +591,6 @@ export class TodoistSync {
 						hasModifiedTask = true;
 					} catch (error) {
 						console.error("Error modifying task:", error);
-						continue;
 					}
 				}
 			}
@@ -638,44 +635,6 @@ export class TodoistSync {
 		}
 	}
 
-	/**
-	 * 从任务列表中删除指定 ID 的任务并更新 JSON 文件
-	 * @param taskIds 要删除的任务 ID 数组
-	 * @returns 返回被成功删除的任务 ID 数组
-	 */
-	async deleteTasksByIds(taskIds: string[]): Promise<string[]> {
-		const deletedTaskIds = [];
-
-		for (const taskId of taskIds) {
-			const api = await this.plugin.todoistRestAPI.initializeAPI();
-			try {
-				const response = await api.deleteTask(taskId);
-				console.log(`response is ${response}`);
-
-				if (response) {
-					//console.log(`Task ${taskId} 删除成功`);
-					new Notice(`Task ${taskId} is deleted.`);
-					deletedTaskIds.push(taskId); // 将被删除的任务 ID 加入数组
-				}
-			} catch (error) {
-				console.error(`Failed to delete task ${taskId}: ${error}`);
-				// 可以添加更好的错误处理方式，比如在这里抛出异常或者记录日志等
-			}
-		}
-
-		if (!deletedTaskIds.length) {
-			console.log("没有删除任务");
-			return [];
-		}
-
-		await this.plugin.cacheOperation.deleteTaskFromCacheByIDs(
-			deletedTaskIds,
-		); // 更新 JSON 文件
-		this.plugin.saveSettings();
-		//console.log(`共删除了 ${deletedTaskIds.length} 条 task`);
-
-		return deletedTaskIds;
-	}
 
 	/**
 	 * Sync missing completed items to Obsidian
@@ -800,7 +759,7 @@ export class TodoistSync {
             const unsyncedEvents = await this.getUnsyncedEvents();
 			console.log(`Events to synchronize: ${unsyncedEvents.length}`);
 
-            const syncedTasks = await this.plugin.cacheOperation.loadTasksFromCache();
+            const syncedTasks = this.plugin.cacheOperation.loadTasksFromCache();
 
             const eventsForTrackedTasks = this.filterEventsForTrackedTasks(unsyncedEvents, syncedTasks);
             const eventsByType = this.categorizeEventsByType(eventsForTrackedTasks, unsyncedEvents, syncedTasks);
@@ -823,13 +782,13 @@ export class TodoistSync {
 		);
     }
 
-    private filterEventsForTrackedTasks(unsyncedEvents: ActivityEvent[], syncedTasks: any[]): ActivityEvent[] {
+    private filterEventsForTrackedTasks(unsyncedEvents: ActivityEvent[], syncedTasks: LocalTask[]): ActivityEvent[] {
 		return unsyncedEvents.filter((event: ActivityEvent): boolean =>
 			syncedTasks.some((task) => task.id === event.objectId)
 		);
     }
 
-    private categorizeEventsByType(eventsForTrackedTasks: ActivityEvent[], unsyncedEvents: ActivityEvent[], syncedTasks: any[]) {
+    private categorizeEventsByType(eventsForTrackedTasks: ActivityEvent[], unsyncedEvents: ActivityEvent[], syncedTasks: LocalTask[]) {
         const eventsForUntrackedNotes = unsyncedEvents.filter((event: ActivityEvent): boolean =>
             !syncedTasks.some((task) => task.id === event.parentItemId)
         );
