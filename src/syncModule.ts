@@ -79,12 +79,6 @@ export class TodoistSync {
 			(taskId: string) => !deletedTaskIds.includes(taskId),
 		);
 
-		/*
-        await this.plugin.fileOperation.updateFrontMatter(file, (frontMatter) => {
-          frontMatter.todoistTasks = newFrontMatter_todoistTasks;
-          frontMatter.todoistCount = frontMatter_todoistCount - deletedTaskAmount;
-        });
-        */
 		const newFileMetadata = {
 			todoistTasks: newFrontMatter_todoistTasks,
 			todoistCount: frontMatter_todoistCount - deletedTaskAmount,
@@ -241,11 +235,7 @@ export class TodoistSync {
 				try {
 					const newTask =
 						await this.plugin.todoistAPI.addTask(currentTask);
-					const {
-						id: todoist_id,
-						projectId: todoist_projectId,
-						url: todoist_url,
-					} = newTask;
+					const { id: todoist_id } = newTask;
 					newTask.path = filepath;
 					console.log(newTask);
 					new Notice(
@@ -294,13 +284,6 @@ export class TodoistSync {
 				const newContent = lines.join("\n");
 				await this.app.vault.modify(file, newContent);
 
-				// 更新 front matter
-				/*
-                this.plugin.fileOperation.updateFrontMatter(file, (frontMatter) => {
-                frontMatter.todoistTasks = newFrontMatter.todoistTasks;
-                frontMatter.todoistCount = newFrontMatter.todoistCount;
-                });
-                */
 
 				await this.plugin.cacheOperation.updateFileMetadata(
 					filepath,
