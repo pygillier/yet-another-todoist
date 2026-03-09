@@ -13,24 +13,20 @@ export class TodoistSync {
 		this.plugin = plugin;
 	}
 
-	async deletedTaskCheck(file_path: string = ""): Promise<void> {
-		let file;
-		let currentFileValue;
-		let view;
-		let filepath;
-
-		if (file_path != "") {
-			file = this.app.vault.getAbstractFileByPath(file_path);
-			filepath = file_path;
-			currentFileValue = await this.app.vault.read(file);
+	private async getFileContext(file_path: string): Promise<{ filepath: string; content: string }> {
+		if (file_path) {
+			const file = this.app.vault.getAbstractFileByPath(file_path);
+			const content = file ? await this.app.vault.read(file as any) : "";
+			return { filepath: file_path, content };
 		} else {
-			view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			//const editor = this.app.workspace.activeEditor?.editor
-			file = this.app.workspace.getActiveFile();
-			filepath = file?.path;
-			//使用view.data 代替 valut.read。vault.read有延迟
-			currentFileValue = view?.data;
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			const file = this.app.workspace.getActiveFile();
+			return { filepath: file?.path ?? "", content: view?.data ?? "" };
 		}
+	}
+
+	async deletedTaskCheck(file_path: string = ""): Promise<void> {
+		const { filepath, content: currentFileValue } = await this.getFileContext(file_path);
 
 		const frontMatter =
 			await this.plugin.cacheOperation.getFileMetadata(filepath);
@@ -168,23 +164,7 @@ export class TodoistSync {
 	}
 
 	async fullTextNewTaskCheck(file_path: string): Promise<void> {
-		let file;
-		let currentFileValue;
-		let view;
-		let filepath;
-
-		if (file_path) {
-			file = this.app.vault.getAbstractFileByPath(file_path);
-			filepath = file_path;
-			currentFileValue = await this.app.vault.read(file);
-		} else {
-			view = this.app.workspace.getActiveViewOfType(MarkdownView);
-			//const editor = this.app.workspace.activeEditor?.editor
-			file = this.app.workspace.getActiveFile();
-			filepath = file?.path;
-			//使用view.data 代替 valut.read。vault.read有延迟
-			currentFileValue = view?.data;
-		}
+		const { filepath, content: currentFileValue } = await this.getFileContext(file_path);
 
 		if (this.plugin.settings.enableFullVaultSync) {
 			//console.log('full vault sync enabled')
@@ -282,7 +262,7 @@ export class TodoistSync {
 			try {
 				// 保存file
 				const newContent = lines.join("\n");
-				await this.app.vault.modify(file, newContent);
+				await this.app.vault.modify(this.app.vault.getAbstractFileByPath(filepath) as any, newContent);
 
 
 				await this.plugin.cacheOperation.updateFileMetadata(
@@ -466,27 +446,12 @@ export class TodoistSync {
 				}
 
 				if (statusModified) {
-					console.log(
-						`Status modified for task ${lineTask_todoist_id}`,
-					);
+					console.log(`Status modified for task ${lineTask_todoist_id}`);
 					if (lineTask.isCompleted === true) {
-						console.log(`task completed`);
-						await this.plugin.todoistAPI.closeTask(
-							lineTask.todoistId.toString(),
-						);
-						this.plugin.cacheOperation.closeTaskToCacheByID(
-							lineTask.todoistId.toString(),
-						);
+						await this.closeTask(lineTask.todoistId.toString());
 					} else {
-						console.log(`task umcompleted`);
-						await this.plugin.todoistAPI.openTask(
-							lineTask.todoistId.toString(),
-						);
-						this.plugin.cacheOperation.reopenTaskToCacheByID(
-							lineTask.todoistId.toString(),
-						);
+						await this.reopenTask(lineTask.todoistId.toString());
 					}
-
 					statusChanged = true;
 				}
 
@@ -534,26 +499,10 @@ export class TodoistSync {
 	}
 
 	async fullTextModifiedTaskCheck(file_path: string): Promise<void> {
-		let file;
-		let currentFileValue;
-		let view;
-		let filepath;
-
 		console.log("ENTER fullTextModifiedTaskCheck")
 
 		try {
-			if (file_path) {
-				file = this.app.vault.getAbstractFileByPath(file_path);
-				filepath = file_path;
-				currentFileValue = await this.app.vault.read(file);
-			} else {
-				view = this.app.workspace.getActiveViewOfType(MarkdownView);
-				file = this.app.workspace.getActiveFile();
-				filepath = file?.path;
-				currentFileValue = view?.data;
-			}
-
-			const content = currentFileValue;
+			const { filepath, content } = await this.getFileContext(file_path);
 
 			let hasModifiedTask = false;
 			const lines = content.split("\n");

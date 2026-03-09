@@ -365,28 +365,6 @@ export class TaskParser {
 	//convert date from obsidian event
 	// 使用示例
 	//const str = "2023-03-27";
-	//const utcStr = localDateStringToUTCDatetimeString(str);
-	//console.log(dateStr); // 输出 2023-03-27T00:00:00.000Z
-	localDateStringToUTCDatetimeString(localDateString: string) {
-		try {
-			if (localDateString === null) {
-				return null;
-			}
-			localDateString = localDateString + "T08:00";
-			let localDateObj = new Date(localDateString);
-			let ISOString = localDateObj.toISOString();
-			return ISOString;
-		} catch (error) {
-			console.error(
-				`Error extracting date from string '${localDateString}': ${error}`,
-			);
-			return null;
-		}
-	}
-
-	//convert date from obsidian event
-	// 使用示例
-	//const str = "2023-03-27";
 	//const utcStr = localDateStringToUTCDateString(str);
 	//console.log(dateStr); // 输出 2023-03-27
 	localDateStringToUTCDateString(localDateString: string) {
