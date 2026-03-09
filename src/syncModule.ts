@@ -158,7 +158,7 @@ export class TodoistSync {
 			);
 		} catch (error) {
 			console.error("Error adding task:", error);
-			console.log(`The error occurred in the file: ${filePath}`);
+			console.error(`The error occurred in the file: ${filePath}`);
 			return;
 		}
 	}
@@ -329,38 +329,38 @@ export class TodoistSync {
 			const lineTaskContent = lineTask.content;
 
 			//content 是否修改
-			const contentModified = !this.plugin.taskParser.taskContentCompare(
+			const isContentChanged = !this.plugin.taskParser.taskContentCompare(
 				lineTask,
 				savedTask,
 			);
 			//tag or labels 是否修改
-			const tagsModified = !this.plugin.taskParser.taskTagCompare(
+			const isTagsChanged = !this.plugin.taskParser.taskTagCompare(
 				lineTask,
 				savedTask,
 			);
 			//project 是否修改
-			const projectModified =
+			const isProjectChanged =
 				!(await this.plugin.taskParser.taskProjectCompare(
 					lineTask,
 					savedTask,
 				));
 			//status 是否修改
-			const statusModified = !this.plugin.taskParser.taskStatusCompare(
+			const isStatusChanged = !this.plugin.taskParser.taskStatusCompare(
 				lineTask,
 				savedTask,
 			);
 			//due date 是否修改
-			const dueDateModified =
+			const isDueDateChanged =
 				!(await this.plugin.taskParser.compareTaskDueDate(
 					lineTask,
 					savedTask,
 				));
 			//parent id 是否修改
-			const parentIdModified = !(
+			const isParentIdChanged = !(
 				lineTask.parentId === savedTask.parentId
 			);
 			//check priority
-			const priorityModified = !(
+			const isPriorityChanged = !(
 				lineTask.priority === savedTask.priority
 			);
 
@@ -374,7 +374,7 @@ export class TodoistSync {
 				let priorityChanged = false;
 
 				let updatedContent = {};
-				if (contentModified) {
+				if (isContentChanged) {
 					console.log(
 						`Content modified for task ${lineTask_todoist_id}`,
 					);
@@ -382,7 +382,7 @@ export class TodoistSync {
 					contentChanged = true;
 				}
 
-				if (tagsModified) {
+				if (isTagsChanged) {
 					console.log(
 						`Tags modified for task ${lineTask_todoist_id}`,
 					);
@@ -390,7 +390,7 @@ export class TodoistSync {
 					tagsChanged = true;
 				}
 
-				if (dueDateModified) {
+				if (isDueDateChanged) {
 					console.log(
 						`Due date modified for task ${lineTask_todoist_id}`,
 					);
@@ -406,20 +406,20 @@ export class TodoistSync {
 				}
 
 				//todoist Rest api 没有 move task to new project的功能
-				if (projectModified) {
+				if (isProjectChanged) {
 					//console.log(`Project id modified for task ${lineTask_todoist_id}`)
 					//updatedContent.projectId = lineTask.projectId
 					//projectChanged = false;
 				}
 
 				//todoist Rest api 没有修改 parent id 的借口
-				if (parentIdModified) {
+				if (isParentIdChanged) {
 					//console.log(`Parnet id modified for task ${lineTask_todoist_id}`)
 					//updatedContent.parentId = lineTask.parentId
 					//parentIdChanged = false;
 				}
 
-				if (priorityModified) {
+				if (isPriorityChanged) {
 					updatedContent.priority = lineTask.priority;
 					priorityChanged = true;
 				}
@@ -445,7 +445,7 @@ export class TodoistSync {
 					);
 				}
 
-				if (statusModified) {
+				if (isStatusChanged) {
 					console.log(`Status modified for task ${lineTask_todoist_id}`);
 					if (lineTask.isCompleted === true) {
 						await this.closeTask(lineTask.todoistId.toString());

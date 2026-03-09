@@ -281,12 +281,12 @@ export class CacheOperation {
 	/**
 	 * Save projects to cache.
 	 */
-	async saveProjectsToCache() {
+	async saveProjectsToCache(): Promise<boolean> {
 		try {
 			this.plugin.settings.todoistTasksData.projects = await this.plugin.todoistAPI.getAllProjects();
 			return true;
 		} catch (error) {
-			console.log(`error downloading projects: ${error}`);
+			console.error(`Error downloading projects: ${error}`);
 			return false;
 		}
 	}
@@ -313,7 +313,7 @@ export class CacheOperation {
 			delete fileMetadatas[oldpath];
 			this.plugin.settings.fileMetadata = fileMetadatas;
 		} catch (error) {
-			console.log(`Error updating renamed file path to cache: ${error}`);
+			console.error(`Error updating renamed file path to cache: ${error}`);
 		}
 	}
 }
