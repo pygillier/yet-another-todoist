@@ -31,6 +31,7 @@ export default class Obsidianist extends Plugin {
 	lastLines: Map<string, number>;
 	statusBar: HTMLElement;
 	syncLock: boolean = false;
+	private syncLockQueue: Array<() => void> = [];
 
 	async onload() {
 		const isSettingsLoaded = await this.loadSettings();
@@ -498,62 +499,44 @@ export default class Obsidianist extends Plugin {
 
 	}
 
-	async checkSyncLock() {
-		let checkCount = 0;
-		while (this.syncLock && checkCount < 10) {
-			await new Promise((resolve) => setTimeout(resolve, 1000));
-			checkCount++;
+	async acquireSyncLock(): Promise<void> {
+		if (!this.syncLock) {
+			this.syncLock = true;
+			this.debugLog("Acquiring sync lock");
+			return;
 		}
-		return !this.syncLock;
+		this.debugLog("Waiting for sync lock to release...");
+		return new Promise<void>((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				const idx = this.syncLockQueue.indexOf(resolve);
+				if (idx !== -1) this.syncLockQueue.splice(idx, 1);
+				reject(new Error("Unable to acquire sync lock: timeout"));
+			}, 10000);
+			this.syncLockQueue.push(() => {
+				clearTimeout(timeout);
+				this.debugLog("Acquiring sync lock");
+				resolve();
+			});
+		});
 	}
 
-	async checkAndHandleSyncLock() {
-		if (this.syncLock) {
-			console.log("sync locked.");
-			const isSyncLockChecked = await this.checkSyncLock();
-			if (!isSyncLockChecked) {
-				return false;
-			}
-			console.log("sync unlocked.");
-		}
-		this.syncLock = true;
-		return true;
-	}
-
-	async acquireSyncLock() {
-		if(this.syncLock)
-		{
-			// Lock is already set, wait for release
-			this.debugLog("Waiting for SyncLock to release...")
-			let counter = 0
-			while (this.syncLock && counter < 10) {
-				await new Promise((resolve) => setTimeout(resolve, 1000));
-				counter++;
-				this.debugLog(`${counter}/10`)
-			}
-			if(this.syncLock)
-			{
-				// Lock still isn't released
-				throw new Error("Unable to acquire sync lock")
-			}
-			else
-			{
-				// Lock released from outside, take it
-				this.debugLog("Acquiring sync lock")
-				this.syncLock = true
-			}
-		}
-		else
-		{
-			// Lock released from outside, take it
-			this.debugLog("Acquiring sync lock")
-			this.syncLock = true
+	releaseSyncLock(): void {
+		this.debugLog("Releasing sync lock");
+		if (this.syncLockQueue.length > 0) {
+			const next = this.syncLockQueue.shift()!;
+			next();
+		} else {
+			this.syncLock = false;
 		}
 	}
 
-	releaseSyncLock() {
-		this.debugLog("Releasing sync lock")
-		this.syncLock = false
+	async checkAndHandleSyncLock(): Promise<boolean> {
+		try {
+			await this.acquireSyncLock();
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	debugLog(message: string) {

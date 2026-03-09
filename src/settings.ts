@@ -198,11 +198,11 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 					}
 					try {
 						await this.plugin.scheduledSynchronization();
-						this.plugin.syncLock = false;
+						this.plugin.releaseSyncLock();
 						new Notice(`Sync completed..`);
 					} catch (error) {
 						new Notice(`An error occurred while syncing.:${error}`);
-						this.plugin.syncLock = false;
+						this.plugin.releaseSyncLock();
 					}
 				}),
 			);
@@ -386,13 +386,13 @@ export class ObsidianistSettingTab extends PluginSettingTab {
 								}
 							}
 						});
-						this.plugin.syncLock = false;
+						this.plugin.releaseSyncLock();
 						new Notice(`All files have been scanned.`);
 					} catch (error) {
 						console.error(
 							`An error occurred while scanning the vault.:${error}`,
 						);
-						this.plugin.syncLock = false;
+						this.plugin.releaseSyncLock();
 					}
 				}),
 			);

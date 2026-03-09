@@ -174,12 +174,20 @@ export class CacheOperation {
 	}
 
 	/**
-	 * Add a Todoist task object to Cache
-	 * @param task LocalTask
-	 * @returns void
+	 * Insert or update a task in the cache.
+	 * If a task with the given ID already exists its fields are merged with `changes`.
+	 * If it does not exist and `changes` contains `content` (i.e. a full task), it is inserted.
 	 */
-	appendTaskToCache(task: LocalTask): void {
-		this.plugin.settings.todoistTasksData.tasks.push(task);
+	upsertTask(taskId: string, changes: Partial<LocalTask>): void {
+		const tasks = this.plugin.settings.todoistTasksData.tasks;
+		const idx = tasks.findIndex((t) => t.id === taskId);
+		if (idx !== -1) {
+			tasks[idx] = { ...tasks[idx], ...changes };
+		} else if ("content" in changes) {
+			tasks.push(changes as LocalTask);
+		} else {
+			console.error(`upsertTask: task ${taskId} not found in cache`);
+		}
 	}
 
 	/**
@@ -193,51 +201,16 @@ export class CacheOperation {
 		return task ?? null;
 	}
 
-	//覆盖update指定id的task
 	updateTaskToCacheByID(task: LocalTask): void {
-		try {
-			//删除就的task
-			this.deleteTaskFromCache(task.id);
-			//添加新的task
-			this.appendTaskToCache(task);
-		} catch (error) {
-			console.error(`Error updating task to Cache: ${error}`);
-		}
+		this.upsertTask(task.id, task);
 	}
 
-	//open a task status
 	reopenTaskToCacheByID(taskId: string): void {
-		try {
-			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-
-			for (let i = 0; i < savedTasks.length; i++) {
-				if (savedTasks[i].id === taskId) {
-					savedTasks[i].isCompleted = false;
-					break;
-				}
-			}
-			this.plugin.settings.todoistTasksData.tasks = savedTasks;
-		} catch (error) {
-			console.error(`Error open task to Cache file: ${error}`);
-		}
+		this.upsertTask(taskId, { isCompleted: false });
 	}
 
-	//close a task status
 	closeTaskToCacheByID(taskId: string): void {
-		try {
-			const savedTasks = this.plugin.settings.todoistTasksData.tasks;
-
-			for (let i = 0; i < savedTasks.length; i++) {
-				if (savedTasks[i].id === taskId) {
-					savedTasks[i].isCompleted = true;
-					break;
-				}
-			}
-			this.plugin.settings.todoistTasksData.tasks = savedTasks;
-		} catch (error) {
-			console.error(`Error close task to Cache file: ${error}`);
-			throw error;
-		}
+		this.upsertTask(taskId, { isCompleted: true });
 	}
 
 	// 通过 ID 删除任务

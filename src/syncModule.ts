@@ -1,4 +1,8 @@
 import Obsidianist from "../main";
+import {TodoistAPI} from "./todoistAPI";
+import {CacheOperation} from "./cacheOperation";
+import {FileOperation} from "./fileOperation";
+import {TaskParser} from "./taskParser";
 import {App, Editor, MarkdownView, Notice} from "obsidian";
 import {ActivityEvent, Task} from "@doist/todoist-api-typescript";
 import {filterActivityEvents} from "./utils";
@@ -7,10 +11,18 @@ import {FileMetadata, LocalTask} from "./interfaces";
 export class TodoistSync {
 	app: App;
 	plugin: Obsidianist;
+	private todoistAPI: TodoistAPI;
+	private cacheOperation: CacheOperation;
+	private fileOperation: FileOperation;
+	private taskParser: TaskParser;
 
 	constructor(app: App, plugin: Obsidianist) {
 		this.app = app;
 		this.plugin = plugin;
+		this.todoistAPI = plugin.todoistAPI;
+		this.cacheOperation = plugin.cacheOperation;
+		this.fileOperation = plugin.fileOperation;
+		this.taskParser = plugin.taskParser;
 	}
 
 	private async getFileContext(file_path: string): Promise<{ filepath: string; content: string }> {
@@ -29,7 +41,7 @@ export class TodoistSync {
 		const { filepath, content: currentFileValue } = await this.getFileContext(file_path);
 
 		const frontMatter =
-			await this.plugin.cacheOperation.getFileMetadata(filepath);
+			await this.cacheOperation.getFileMetadata(filepath);
 		if (!frontMatter || !frontMatter.todoistTasks) {
 			console.log("frontmatter没有task");
 			return;
@@ -50,7 +62,7 @@ export class TodoistSync {
 			)
 			.map(async (taskId: string) => {
 				try {
-					this.plugin.todoistAPI.deleteTask(taskId);
+					this.todoistAPI.deleteTask(taskId);
 					new Notice(`task ${taskId} is deleted`);
 					return taskId;
 				} catch (error) {
@@ -64,7 +76,7 @@ export class TodoistSync {
 			//console.log("没有删除任务");
 			return;
 		}
-		this.plugin.cacheOperation.deleteTaskFromCacheByIDs(deletedTaskIds);
+		this.cacheOperation.deleteTaskFromCacheByIDs(deletedTaskIds);
 		//console.log(`删除了${deletedTaskAmount} 条 task`)
 		await this.plugin.saveSettings();
 		// 更新 newFrontMatter_todoistTasks 数组
@@ -79,7 +91,7 @@ export class TodoistSync {
 			todoistTasks: newFrontMatter_todoistTasks,
 			todoistCount: frontMatter_todoistCount - deletedTaskAmount,
 		};
-		await this.plugin.cacheOperation.updateFileMetadata(
+		await this.cacheOperation.updateFileMetadata(
 			filepath,
 			newFileMetadata,
 		);
@@ -103,7 +115,7 @@ export class TodoistSync {
 		const linetxt = editor.getLine(line);
 
 		const extractedTask =
-			await this.plugin.taskParser.convertLineToTask({
+			await this.taskParser.convertLineToTask({
 				lineContent: linetxt,
 				lineNumber: line,
 				fileContent: fileContent,
@@ -111,18 +123,18 @@ export class TodoistSync {
 			});
 
 		try {
-			const newTask =	await this.plugin.todoistAPI.addTask(extractedTask);
+			const newTask =	await this.todoistAPI.addTask(extractedTask);
 			
 			newTask.path = filePath;
 
 			new Notice(`new task ${newTask.content} id is ${newTask.id}`);
 
-			this.plugin.cacheOperation.appendTaskToCache(newTask);
+			this.cacheOperation.upsertTask(newTask.id, newTask);
 
 			// WHen a task is created with completed status, need to close it in todoist and cache
 			if (extractedTask.isCompleted === true) {
-				await this.plugin.todoistAPI.closeTask(newTask.id);
-				this.plugin.cacheOperation.closeTaskToCacheByID(newTask.id);
+				await this.todoistAPI.closeTask(newTask.id);
+				this.cacheOperation.closeTaskToCacheByID(newTask.id);
 			}
 			await this.plugin.saveSettings();
 
@@ -131,7 +143,7 @@ export class TodoistSync {
 			const link = this.plugin.settings.useAppURI
 				? `[link](todoist://task?id=${newTask.id})`
 				: `[link](${newTask.url})`;
-			const text = this.plugin.taskParser.addTodoistLink(
+			const text = this.taskParser.addTodoistLink(
 				text_with_out_link,
 				link,
 			);
@@ -145,14 +157,14 @@ export class TodoistSync {
 
 			// Update file metadata in cache
 			const metadata: FileMetadata =
-				await this.plugin.cacheOperation.getFileMetadata(
+				await this.cacheOperation.getFileMetadata(
 					filePath,
 				);
 
 			metadata.todoistTasks.push(newTask.id);
 			metadata.todoistCount = metadata.todoistTasks.length;
 
-			await this.plugin.cacheOperation.updateFileMetadata(
+			await this.cacheOperation.updateFileMetadata(
 				filePath,
 				metadata,
 			);
@@ -169,7 +181,7 @@ export class TodoistSync {
 		if (this.plugin.settings.enableFullVaultSync) {
 			//console.log('full vault sync enabled')
 			//console.log(filepath)
-			await this.plugin.fileOperation.addTodoistTagToFile(filepath);
+			await this.fileOperation.addTodoistTagToFile(filepath);
 		}
 
 		const content = currentFileValue;
@@ -177,7 +189,7 @@ export class TodoistSync {
 		let newFrontMatter;
 		//frontMatteer
 		const frontMatter =
-			await this.plugin.cacheOperation.getFileMetadata(filepath);
+			await this.cacheOperation.getFileMetadata(filepath);
 		//console.log(frontMatter);
 
 		if (!frontMatter) {
@@ -193,15 +205,15 @@ export class TodoistSync {
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
 			if (
-				!this.plugin.taskParser.hasTodoistId(line) &&
-				this.plugin.taskParser.hasTodoistTag(line)
+				!this.taskParser.hasTodoistId(line) &&
+				this.taskParser.hasTodoistTag(line)
 			) {
 				//console.log('this is a new task')
 				//console.log(`current line is ${i}`)
 				//console.log(`line text: ${line}`)
 				console.log(filepath);
 				const currentTask =
-					await this.plugin.taskParser.convertLineToTask({
+					await this.taskParser.convertLineToTask({
 						lineContent: line,
 						lineNumber: i,
 						fileContent: content ?? "",
@@ -214,7 +226,7 @@ export class TodoistSync {
 				console.log(currentTask);
 				try {
 					const newTask =
-						await this.plugin.todoistAPI.addTask(currentTask);
+						await this.todoistAPI.addTask(currentTask);
 					const { id: todoist_id } = newTask;
 					newTask.path = filepath;
 					console.log(newTask);
@@ -222,12 +234,12 @@ export class TodoistSync {
 						`new task ${newTask.content} id is ${newTask.id}`,
 					);
 					//newTask写入json文件
-					this.plugin.cacheOperation.appendTaskToCache(newTask);
+					this.cacheOperation.upsertTask(newTask.id, newTask);
 
 					//如果任务已完成
 					if (currentTask.isCompleted === true) {
-						await this.plugin.todoistAPI.closeTask(newTask.id);
-						this.plugin.cacheOperation.closeTaskToCacheByID(
+						await this.todoistAPI.closeTask(newTask.id);
+						this.cacheOperation.closeTaskToCacheByID(
 							todoist_id,
 						);
 					}
@@ -236,7 +248,7 @@ export class TodoistSync {
 					//todoist id 保存到 任务后面
 					const text_with_out_link = `${line} %%[todoist_id:: ${todoist_id}]%%`;
 					const link = `[link](${newTask.url})`;
-					lines[i] = this.plugin.taskParser.addTodoistLink(
+					lines[i] = this.taskParser.addTodoistLink(
 						text_with_out_link,
 						link,
 					);
@@ -265,7 +277,7 @@ export class TodoistSync {
 				await this.app.vault.modify(this.app.vault.getAbstractFileByPath(filepath) as any, newContent);
 
 
-				await this.plugin.cacheOperation.updateFileMetadata(
+				await this.cacheOperation.updateFileMetadata(
 					filepath,
 					newFrontMatter,
 				);
@@ -282,27 +294,27 @@ export class TodoistSync {
 		fileContent: string,
 	): Promise<void> {
 		console.log("Line modified, checking if it's a task line...");
-		//const lineText = await this.plugin.fileOperation.getLineTextFromFilePath(filepath,lineNumber)
+		//const lineText = await this.fileOperation.getLineTextFromFilePath(filepath,lineNumber)
 
 		if (this.plugin.settings.enableFullVaultSync) {
-			//await this.plugin.fileOperation.addTodoistTagToLine(filepath,lineText,lineNumber,fileContent)
+			//await this.fileOperation.addTodoistTagToLine(filepath,lineText,lineNumber,fileContent)
 
 			//new empty metadata
 			const metadata =
-				await this.plugin.cacheOperation.getFileMetadata(filepath);
+				await this.cacheOperation.getFileMetadata(filepath);
 			if (!metadata) {
-				await this.plugin.cacheOperation.newEmptyFileMetadata(filepath);
+				await this.cacheOperation.newEmptyFileMetadata(filepath);
 			}
 			this.plugin.saveSettings();
 		}
 
 		//检查task
 		if (
-			this.plugin.taskParser.hasTodoistId(lineText) &&
-			this.plugin.taskParser.hasTodoistTag(lineText)
+			this.taskParser.hasTodoistId(lineText) &&
+			this.taskParser.hasTodoistTag(lineText)
 		) {
 			const lineTask =
-				await this.plugin.taskParser.convertLineToTask({
+				await this.taskParser.convertLineToTask({
 					lineContent: lineText,
 					lineNumber: lineNumber,
 					fileContent: fileContent,
@@ -313,13 +325,13 @@ export class TodoistSync {
 			//console.log(lineTask_todoist_id )
 			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)
 			const savedTask =
-				await this.plugin.cacheOperation.loadTaskByID(
+				await this.cacheOperation.loadTaskByID(
 					lineTask_todoist_id,
 				); //dataview中 id为数字，todoist中id为字符串，需要转换
 			if (!savedTask) {
 				console.log(`本地缓存中没有task ${lineTask.todoistId}`);
 				const url =
-					this.plugin.taskParser.getObsidianUrlFromFilepath(filepath);
+					this.taskParser.getObsidianUrlFromFilepath(filepath);
 				console.log(url);
 				return;
 			}
@@ -329,29 +341,29 @@ export class TodoistSync {
 			const lineTaskContent = lineTask.content;
 
 			//content 是否修改
-			const isContentChanged = !this.plugin.taskParser.taskContentCompare(
+			const isContentChanged = !this.taskParser.taskContentCompare(
 				lineTask,
 				savedTask,
 			);
 			//tag or labels 是否修改
-			const isTagsChanged = !this.plugin.taskParser.taskTagCompare(
+			const isTagsChanged = !this.taskParser.taskTagCompare(
 				lineTask,
 				savedTask,
 			);
 			//project 是否修改
 			const isProjectChanged =
-				!(await this.plugin.taskParser.taskProjectCompare(
+				!(await this.taskParser.taskProjectCompare(
 					lineTask,
 					savedTask,
 				));
 			//status 是否修改
-			const isStatusChanged = !this.plugin.taskParser.taskStatusCompare(
+			const isStatusChanged = !this.taskParser.taskStatusCompare(
 				lineTask,
 				savedTask,
 			);
 			//due date 是否修改
 			const isDueDateChanged =
-				!(await this.plugin.taskParser.compareTaskDueDate(
+				!(await this.taskParser.compareTaskDueDate(
 					lineTask,
 					savedTask,
 				));
@@ -435,12 +447,12 @@ export class TodoistSync {
 					//console.log("task content was modified");
 					//console.log(updatedContent)
 					const updatedTask =
-						await this.plugin.todoistAPI.updateTask(
+						await this.todoistAPI.updateTask(
 							lineTask.todoistId.toString(),
 							updatedContent,
 						);
 					updatedTask.path = filepath;
-					this.plugin.cacheOperation.updateTaskToCacheByID(
+					this.cacheOperation.updateTaskToCacheByID(
 						updatedTask,
 					);
 				}
@@ -510,8 +522,8 @@ export class TodoistSync {
 			for (let i = 0; i < lines.length; i++) {
 				const line = lines[i];
 				if (
-					this.plugin.taskParser.hasTodoistId(line) &&
-					this.plugin.taskParser.hasTodoistTag(line)
+					this.taskParser.hasTodoistId(line) &&
+					this.taskParser.hasTodoistTag(line)
 				) {
 					try {
 						await this.lineModifiedTaskCheck(
@@ -542,9 +554,9 @@ export class TodoistSync {
 	// Close a task by calling API and updating JSON file
 	async closeTask(taskId: string): Promise<void> {
 		try {
-			await this.plugin.todoistAPI.closeTask(taskId);
-			await this.plugin.fileOperation.completeTaskInFile(taskId);
-			this.plugin.cacheOperation.closeTaskToCacheByID(taskId);
+			await this.todoistAPI.closeTask(taskId);
+			await this.fileOperation.completeTaskInFile(taskId);
+			this.cacheOperation.closeTaskToCacheByID(taskId);
 			this.plugin.saveSettings();
 			new Notice(`Task "${taskId}" closed.`);
 		} catch (error) {
@@ -556,9 +568,9 @@ export class TodoistSync {
 	//open task
 	async reopenTask(taskId: string): Promise<void> {
 		try {
-			await this.plugin.todoistAPI.openTask(taskId);
-			await this.plugin.fileOperation.uncompleteTaskInFile(taskId);
-			this.plugin.cacheOperation.reopenTaskToCacheByID(taskId);
+			await this.todoistAPI.openTask(taskId);
+			await this.fileOperation.uncompleteTaskInFile(taskId);
+			this.cacheOperation.reopenTaskToCacheByID(taskId);
 			await this.plugin.saveSettings();
 			new Notice(`Task "${taskId}" reopened.`);
 		} catch (error) {
@@ -577,14 +589,14 @@ export class TodoistSync {
 		try {
 			const processedEvents = [];
 			for (const evt of events) {
-				await this.plugin.fileOperation.completeTaskInFile(evt.objectId);
-				this.plugin.cacheOperation.closeTaskToCacheByID(evt.objectId);
+				await this.fileOperation.completeTaskInFile(evt.objectId);
+				this.cacheOperation.closeTaskToCacheByID(evt.objectId);
 				new Notice(`Task ${evt.objectId} is closed.`);
 				processedEvents.push(evt);
 			}
 
 			// Save processed events to cache
-			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			this.cacheOperation.appendEventsToCache(processedEvents);
 			await this.plugin.saveSettings();
 		} catch (error) {
 			throw new Error("Error while processing unsyncedCompletedItems：" + error);
@@ -600,13 +612,13 @@ export class TodoistSync {
 		try {
 			const processedEvents: ActivityEvent[] = [];
 			for (const evt of events) {
-				await this.plugin.fileOperation.uncompleteTaskInFile(evt.objectId);
-				this.plugin.cacheOperation.reopenTaskToCacheByID(evt.objectId);
+				await this.fileOperation.uncompleteTaskInFile(evt.objectId);
+				this.cacheOperation.reopenTaskToCacheByID(evt.objectId);
 				new Notice(`Task ${evt.objectId} is reopened.`);
 				processedEvents.push(evt);
 			}
 
-			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			this.cacheOperation.appendEventsToCache(processedEvents);
 			await this.plugin.saveSettings();
 		} catch (error) {
 			throw new Error("Error while processing unsyncedUncompletedItems：" + error);
@@ -635,7 +647,7 @@ export class TodoistSync {
 				processedEvents.push(e);
 			}
 
-			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			this.cacheOperation.appendEventsToCache(processedEvents);
 			await this.plugin.saveSettings();
 		} catch (error) {
 			throw new Error("Error while processing unsyncedUpdatedItems：" + error);
@@ -643,12 +655,12 @@ export class TodoistSync {
 	}
 
 	async syncUpdatedTaskContentToObsidian(e: ActivityEvent) {
-		await this.plugin.fileOperation.syncUpdatedTaskContentToTheFile(e);
-		const task: LocalTask | null = this.plugin.cacheOperation.loadTaskByID(e.objectId);
+		await this.fileOperation.syncUpdatedTaskContentToTheFile(e);
+		const task: LocalTask | null = this.cacheOperation.loadTaskByID(e.objectId);
 
 		if (task) {
 			task.content = e.extraData?.content ?? task.content;
-			this.plugin.cacheOperation.updateTaskToCacheByID(task);
+			this.cacheOperation.updateTaskToCacheByID(task);
 			new Notice(
 				`The content of Task ${e.objectId} has been modified.`,
 			);
@@ -659,10 +671,10 @@ export class TodoistSync {
 	}
 
 	async syncUpdatedTaskDueDateToObsidian(e: ActivityEvent) {
-		await this.plugin.fileOperation.syncUpdatedTaskDueDateToFile(e);
+		await this.fileOperation.syncUpdatedTaskDueDateToFile(e);
 		
-		const task: Task = await this.plugin.todoistAPI.getTaskById(e.objectId);
-		this.plugin.cacheOperation.updateTaskToCacheByID(task);
+		const task: Task = await this.todoistAPI.getTaskById(e.objectId);
+		this.cacheOperation.updateTaskToCacheByID(task);
 
 		new Notice(`The due date of Task ${e.objectId} has been modified.`);
 	}
@@ -675,11 +687,11 @@ export class TodoistSync {
 		try {
 			const processedEvents = [];
 			for (const e of events) {
-				await this.plugin.fileOperation.syncAddedTaskNoteToTheFile(e);
+				await this.fileOperation.syncAddedTaskNoteToTheFile(e);
 				new Notice(`Task ${e.parentItemId} note is added.`);
 				processedEvents.push(e);
 			}
-			this.plugin.cacheOperation.appendEventsToCache(processedEvents);
+			this.cacheOperation.appendEventsToCache(processedEvents);
 			await this.plugin.saveSettings();
 		} catch (error) {
 			console.error("Error while syncing tasks notes to obsidian：", error);
@@ -691,7 +703,7 @@ export class TodoistSync {
             const unsyncedEvents = await this.getUnsyncedEvents();
 			console.log(`Events to synchronize: ${unsyncedEvents.length}`);
 
-            const syncedTasks = this.plugin.cacheOperation.loadTasksFromCache();
+            const syncedTasks = this.cacheOperation.loadTasksFromCache();
 
             const eventsForTrackedTasks = this.filterEventsForTrackedTasks(unsyncedEvents, syncedTasks);
             const eventsByType = this.categorizeEventsByType(eventsForTrackedTasks, unsyncedEvents, syncedTasks);
@@ -706,8 +718,8 @@ export class TodoistSync {
     }
 
     private async getUnsyncedEvents(): Promise<ActivityEvent[]> {
-        const allEvents = await this.plugin.todoistAPI.getNonObsidianActivities();
-        const syncedEvents = await this.plugin.cacheOperation.loadEventsFromCache();
+        const allEvents = await this.todoistAPI.getNonObsidianActivities();
+        const syncedEvents = await this.cacheOperation.loadEventsFromCache();
 
 		return allEvents.filter((event: ActivityEvent): boolean =>
 			!syncedEvents.some((syncedEvent) => syncedEvent.id === event.id)
@@ -755,19 +767,19 @@ export class TodoistSync {
     private async handleProjectEvents(projectEvents: ActivityEvent[]) {
         if (projectEvents.length > 0) {
             console.log("New project event");
-            await this.plugin.cacheOperation.saveProjectsToCache();
-            this.plugin.cacheOperation.appendEventsToCache(projectEvents);
+            await this.cacheOperation.saveProjectsToCache();
+            this.cacheOperation.appendEventsToCache(projectEvents);
         }
     }
 
     private async finalizeSync() {
-        this.plugin.cacheOperation.updateLastSyncTime(new Date());
+        this.cacheOperation.updateLastSyncTime(new Date());
         await this.plugin.saveSettings();
     }
 
     async backupTodoistAllResources() {
         try {
-            const resources = await this.plugin.todoistAPI.getAllResources();
+            const resources = await this.todoistAPI.getAllResources();
             const filename = this.generateBackupFilename();
 
             await this.app.vault.create(filename, JSON.stringify(resources, null, 2));
@@ -794,24 +806,24 @@ export class TodoistSync {
 	//After renaming the file, check all tasks in the file and update all links.
 	async updateTaskDescription(filepath: string) {
 		const metadata =
-			await this.plugin.cacheOperation.getFileMetadata(filepath);
+			await this.cacheOperation.getFileMetadata(filepath);
 		if (!metadata || !metadata.todoistTasks) {
 			return;
 		}
 		const description =
-			this.plugin.taskParser.getObsidianUrlFromFilepath(filepath);
+			this.taskParser.getObsidianUrlFromFilepath(filepath);
 		const updatedContent = {
 			description: "",
 		};
 		updatedContent.description = description;
 		try {
 			for (const taskId of metadata.todoistTasks as string[]) {
-				const updatedTask = await this.plugin.todoistAPI.updateTask(
+				const updatedTask = await this.todoistAPI.updateTask(
 					taskId,
 					updatedContent,
 				);
 				updatedTask.path = filepath;
-				this.plugin.cacheOperation.updateTaskToCacheByID(updatedTask);
+				this.cacheOperation.updateTaskToCacheByID(updatedTask);
 			}
 		} catch (error) {
 			console.error("An error occurred in updateTaskDescription:", error);
