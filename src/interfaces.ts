@@ -21,7 +21,7 @@ export default interface TaskObject {
 	dueLang?: string;
 	assigneeId?: string;
 	isCompleted?: boolean;
-	todoistId?: string | null;
+	todoistId: string;
 	parentId: string | null;
 	hasParent: boolean;
 }
@@ -38,7 +38,7 @@ export interface FileMetadata {
 	defaultProjectId?: string;
 }
 
-export interface ConversionArguments {
+export interface LineArguments {
 	lineContent: string;
 	lineNumber: number;
 	fileContent: string;

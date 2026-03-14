@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Plugin, Editor } from "obsidian";
+import { MarkdownView, Notice, Plugin, Editor, TFile } from "obsidian";
 
 //settings
 import {
@@ -216,8 +216,6 @@ export default class Todoistian extends Plugin {
 						}`,
 					);
 					this.releaseSyncLock();
-					// You can add further error handling logic here. For example, you may want to
-					// revert certain operations, or alert the user about the error.
 				}
 			}),
 		);
@@ -361,48 +359,41 @@ export default class Todoistian extends Plugin {
 	async checkLineChanges() {
 		this.debugLog(`Checking line changes...`);
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (view) {
+
+		// View with an active file (not editor-only)
+		if (view && view.file instanceof TFile) {
 			const cursor = view.editor.getCursor();
 			const line = cursor.line;
 			const fileContent = view.data;
-			const fileName = view.file?.name;
-			const filepath = view.file?.path;
-			if (!fileName || !filepath) return;
-			if (
-				typeof this.lastLines === "undefined" ||
-				typeof this.lastLines.get(fileName) === "undefined"
-			) {
-				this.lastLines.set(fileName, line);
-				return;
-			}
+			const fileName = view.file.name;
+			const filepath = view.file.path;
 
-			if (
-				this.lastLines.has(fileName) &&
-				line !== this.lastLines.get(fileName)
-			) {
-				const lastLine = this.lastLines.get(fileName);
-				this.debugLog(
-					`Line changed! current line is ${line}, last line is ${lastLine}`,
-				);
-
-				const lastLineText = view.editor.getLine(lastLine ?? 0);
-
-				this.lastLines.set(fileName, line);
-				try {
-					if (!(await this.checkAndHandleSyncLock())) return;
-					await this.todoistSync.lineModifiedTaskCheck(
-						filepath,
-						lastLineText,
-						lastLine ?? 0,
-						fileContent,
+			if (this.lastLines.has(fileName)) {
+				// File is present in tracked files.
+				if (line !== this.lastLines.get(fileName)) {
+					const lastLine = this.lastLines.get(fileName) ?? 0;
+					this.debugLog(
+						`Line changed! current line is ${line}, last line is ${lastLine}`,
 					);
-					this.releaseSyncLock();
-				} catch (error) {
-					console.error(
-						`An error occurred while check modified task in line text: ${error}`,
-					);
-					this.releaseSyncLock();
+
+					const lastLineText = view.editor.getLine(lastLine);
+					this.lastLines.set(fileName, line);
+					try {
+						await this.todoistSync.lineModifiedTaskCheck({
+							lineContent: lastLineText,
+							lineNumber: lastLine,
+							fileContent: fileContent,
+							filePath: filepath,
+						});
+					} catch (error) {
+						console.error(
+							`An error occurred while check modified task in line text: ${error}`,
+						);
+					}
 				}
+			} else {
+				// Potential new file, nothing to do
+				this.lastLines.set(fileName, line);
 			}
 		}
 	}

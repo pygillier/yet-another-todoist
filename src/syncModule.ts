@@ -6,7 +6,11 @@ import { TaskParser } from "./taskParser";
 import { App, Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { ActivityEvent, Task } from "@doist/todoist-api-typescript";
 import { filterActivityEvents } from "./utils";
-import { FileMetadata, LocalTask } from "./interfaces";
+import TaskObject, {
+	FileMetadata,
+	LineArguments,
+	LocalTask,
+} from "./interfaces";
 
 export class TodoistSync {
 	app: App;
@@ -275,220 +279,94 @@ export class TodoistSync {
 		}
 	}
 
-	async lineModifiedTaskCheck(
-		filepath: string,
-		lineText: string,
-		lineNumber: number,
-		fileContent: string,
-	): Promise<void> {
-		console.debug("Line modified, checking if it's a task line...");
-		//const lineText = await this.fileOperation.getLineTextFromFilePath(filepath,lineNumber)
+	async lineModifiedTaskCheck(args: LineArguments): Promise<void> {
+		console.debug("Checking content of modified line");
 
 		if (this.plugin.settings.enableFullVaultSync) {
 			//await this.fileOperation.addTodoistTagToLine(filepath,lineText,lineNumber,fileContent)
 
 			//new empty metadata
-			const metadata = this.cacheOperation.getFileMetadata(filepath);
+			const metadata = this.cacheOperation.getFileMetadata(args.filePath);
 			if (!metadata) {
-				this.cacheOperation.newEmptyFileMetadata(filepath);
+				this.cacheOperation.newEmptyFileMetadata(args.filePath);
 			}
 			void this.plugin.saveSettings();
 		}
 
-		//检查task
+		// Provided line has the tag & todoist ID
 		if (
-			this.taskParser.hasTodoistId(lineText) &&
-			this.taskParser.hasTodoistTag(lineText)
+			this.taskParser.hasTodoistId(args.lineContent) &&
+			this.taskParser.hasTodoistTag(args.lineContent)
 		) {
-			const lineTask = this.taskParser.convertLineToTask({
-				lineContent: lineText,
-				lineNumber: lineNumber,
-				fileContent: fileContent,
-				filePath: filepath,
-			});
-
-			const lineTask_todoist_id = lineTask.todoistId?.toString();
-			//console.log(lineTask_todoist_id )
-			//console.log(`lastline task id is ${lastLineTask_todoist_id}`)
-			const savedTask =
-				this.cacheOperation.loadTaskByID(lineTask_todoist_id); //dataview中 id为数字，todoist中id为字符串，需要转换
-			if (!savedTask) {
-				console.warn(`本地缓存中没有task ${lineTask.todoistId}`);
-				const url =
-					this.taskParser.getObsidianUrlFromFilepath(filepath);
-				console.debug(url);
-				return;
-			}
-			//console.log(savedTask)
-
-			//检查内容是否修改
-			const lineTaskContent = lineTask.content;
-
-			//content 是否修改
-			const isContentChanged = !this.taskParser.taskContentCompare(
-				lineTask,
-				savedTask,
-			);
-			//tag or labels 是否修改
-			const isTagsChanged = !this.taskParser.taskTagCompare(
-				lineTask,
-				savedTask,
-			);
-			//project 是否修改
-			const isProjectChanged = !this.taskParser.taskProjectCompare(
-				lineTask,
-				savedTask,
-			);
-			//status 是否修改
-			const isStatusChanged = !this.taskParser.taskStatusCompare(
-				lineTask,
-				savedTask,
-			);
-			//due date 是否修改
-			const isDueDateChanged = !this.taskParser.compareTaskDueDate(
-				lineTask,
-				savedTask,
-			);
-			//parent id 是否修改
-			const isParentIdChanged = !(
-				lineTask.parentId === savedTask.parentId
-			);
-			//check priority
-			const isPriorityChanged = !(
-				lineTask.priority === savedTask.priority
-			);
+			const task = this.taskParser.convertLineToTask(args);
 
 			try {
-				let contentChanged = false;
-				let tagsChanged = false;
-				let projectChanged = false;
-				let statusChanged = false;
-				let dueDateChanged = false;
-				let parentIdChanged = false;
-				let priorityChanged = false;
-
-				let updatedContent = {};
-				if (isContentChanged) {
-					console.debug(
-						`Content modified for task ${lineTask_todoist_id}`,
+				// Fetch associated task from cache for comparison
+				const savedTask = this.cacheOperation.loadTaskByID(
+					task.todoistId,
+				);
+				const changes = this.compareTasks(task, savedTask);
+				if (Object.keys(changes).length > 0) {
+					console.warn(
+						`Task updated locally. Syncing with Todoist (ID: ${savedTask.id})`,
 					);
-					updatedContent.content = lineTaskContent;
-					contentChanged = true;
-				}
-
-				if (isTagsChanged) {
-					console.debug(
-						`Tags modified for task ${lineTask_todoist_id}`,
-					);
-					updatedContent.labels = lineTask.labels;
-					tagsChanged = true;
-				}
-
-				if (isDueDateChanged) {
-					console.debug(
-						`Due date modified for task ${lineTask_todoist_id}`,
-					);
-					console.debug(lineTask.dueDate);
-					//console.log(savedTask.due.date)
-					if (lineTask.dueDate === "") {
-						updatedContent.dueString = "no date";
-					} else {
-						updatedContent.dueDate = lineTask.dueDate;
-					}
-
-					dueDateChanged = true;
-				}
-
-				//todoist Rest api 没有 move task to new project的功能
-				if (isProjectChanged) {
-					//console.log(`Project id modified for task ${lineTask_todoist_id}`)
-					//updatedContent.projectId = lineTask.projectId
-					//projectChanged = false;
-				}
-
-				//todoist Rest api 没有修改 parent id 的借口
-				if (isParentIdChanged) {
-					//console.log(`Parnet id modified for task ${lineTask_todoist_id}`)
-					//updatedContent.parentId = lineTask.parentId
-					//parentIdChanged = false;
-				}
-
-				if (isPriorityChanged) {
-					updatedContent.priority = lineTask.priority;
-					priorityChanged = true;
-				}
-
-				if (
-					contentChanged ||
-					tagsChanged ||
-					dueDateChanged ||
-					projectChanged ||
-					parentIdChanged ||
-					priorityChanged
-				) {
-					//console.log("task content was modified");
-					//console.log(updatedContent)
+					void (await this.plugin.acquireSyncLock());
 					const updatedTask = await this.todoistAPI.updateTask(
-						lineTask.todoistId.toString(),
-						updatedContent,
+						task.todoistId.toString(),
+						changes,
 					);
-					updatedTask.path = filepath;
+					updatedTask.path = args.filePath;
 					this.cacheOperation.updateTaskToCacheByID(updatedTask);
-				}
-
-				if (isStatusChanged) {
-					console.debug(
-						`Status modified for task ${lineTask_todoist_id}`,
-					);
-					if (lineTask.isCompleted === true) {
-						await this.closeTask(lineTask.todoistId.toString());
-					} else {
-						await this.reopenTask(lineTask.todoistId.toString());
-					}
-					statusChanged = true;
-				}
-
-				if (
-					contentChanged ||
-					statusChanged ||
-					dueDateChanged ||
-					tagsChanged ||
-					projectChanged ||
-					priorityChanged
-				) {
-					console.debug(lineTask);
-					console.debug(savedTask);
-					//`Task ${lastLineTaskTodoistId} was modified`
-					await this.plugin.saveSettings();
-					let message = `Task ${lineTask_todoist_id} is updated.`;
-
-					if (contentChanged) {
-						message += " Content was changed.";
-					}
-					if (statusChanged) {
-						message += " Status was changed.";
-					}
-					if (dueDateChanged) {
-						message += " Due date was changed.";
-					}
-					if (tagsChanged) {
-						message += " Tags were changed.";
-					}
-					if (projectChanged) {
-						message += " Project was changed.";
-					}
-					if (priorityChanged) {
-						message += " Priority was changed.";
-					}
-
-					new Notice(message);
+					this.plugin.releaseSyncLock();
 				} else {
-					//console.log(`Task ${lineTask_todoist_id} did not change`);
+					console.debug("No changes found.");
 				}
 			} catch (error) {
-				console.error("Error updating task:", error);
+				console.error("Error while checking modified line:", error);
 			}
+
+			return;
 		}
+	}
+
+	compareTasks(local: TaskObject, saved: LocalTask) {
+		const comparisonKeys = [
+			"content",
+			"description",
+			"labels",
+			"projectId",
+			"due",
+			"parentId",
+			"priority",
+		];
+		const changes: Partial<TaskObject> = {};
+
+		comparisonKeys.forEach((key) => {
+			if (key == "labels") {
+				// Labels length is different or not all local tags in saved
+				if (
+					local.labels?.length !== saved.labels.length ||
+					!local.labels
+						?.sort()
+						.every(
+							(val, index) => val === saved.labels.sort()[index],
+						)
+				) {
+					changes["labels"] = local.labels;
+				}
+			} else if (key == "due") {
+				if (local.dueDate != saved.due?.date) {
+					changes["dueDate"] = local.dueDate;
+				}
+			} else {
+				// Remaining fields
+				// @ts-ignore
+				if (local[key] !== saved[key]) {
+					changes[key] = local[key] as string;
+				}
+			}
+		});
+		return changes;
 	}
 
 	async fullTextModifiedTaskCheck(file_path: string): Promise<void> {
@@ -507,12 +385,12 @@ export class TodoistSync {
 					this.taskParser.hasTodoistTag(line)
 				) {
 					try {
-						await this.lineModifiedTaskCheck(
-							filepath,
-							line,
-							i,
-							content,
-						);
+						await this.lineModifiedTaskCheck({
+							filePath: filepath,
+							fileContent: content,
+							lineContent: line,
+							lineNumber: i,
+						});
 						hasModifiedTask = true;
 					} catch (error) {
 						console.error("Error modifying task:", error);

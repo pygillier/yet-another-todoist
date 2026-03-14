@@ -1,6 +1,6 @@
 import { App } from "obsidian";
 import Todoistian from "../main";
-import TaskObject, { ConversionArguments, LocalTask } from "./interfaces";
+import TaskObject, { LineArguments, LocalTask } from "./interfaces";
 
 const keywords = {
 	TODOIST_TAG: "#todoist",
@@ -51,7 +51,7 @@ export class TaskParser {
 		this.plugin = plugin;
 	}
 
-	convertLineToTask(args: ConversionArguments): TaskObject {
+	convertLineToTask(args: LineArguments): TaskObject {
 		/**
 		 * Convert a line from the note to a TaskObject.
 		 */
@@ -61,15 +61,16 @@ export class TaskParser {
 		// Clean out text
 		const cleanedText = this.removeTaskIndentation(args.lineContent);
 
-		const task = {
+		const task: TaskObject = {
 			hasParent: false,
+			parentId: null,
 			content: this.getTaskContentFromLineText(cleanedText),
 			dueDate: this.getDueDateFromLineText(cleanedText),
 			labels: this.getAllTagsFromLineText(cleanedText),
 			priority: this.getTaskPriority(cleanedText),
 			isCompleted: this.isTaskCheckboxChecked(cleanedText),
 			todoistId: this.extractTodoistIdFromText(cleanedText),
-		} as TaskObject;
+		};
 
 		// Config
 		const project = this.plugin.cacheOperation.getProjectForFile(
@@ -180,8 +181,8 @@ export class TaskParser {
 		return text.match(REGEX.PROJECT_NAME)?.[1] ?? null;
 	}
 
-	extractTodoistIdFromText(text: string): string | null {
-		return text.match(REGEX.TODOIST_ID_NUM)?.[1] ?? null;
+	extractTodoistIdFromText(text: string): string {
+		return text.match(REGEX.TODOIST_ID_NUM)?.[1] ?? "";
 	}
 
 	getTaskContentFromLineText(lineText: string) {
